@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Note Taker</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fab fa-youtube"></i> YouTube Note Taker</h1>
+            <p>Take notes on your favorite YouTube videos</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Sidebar - Saved Notes -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h3><i class="fas fa-bookmark"></i> Saved Notes</h3>
+                    <div class="sidebar-actions">
+                        <div class="download-dropdown">
+                            <button id="downloadBtn" class="download-btn" title="Download all saved notes">
+                                <i class="fas fa-download"></i> Download All Notes
+                            </button>
+                            <div class="download-menu" id="downloadMenu">
+                                <button class="download-option" data-format="markdown">
+                                    <i class="fas fa-file-code"></i> Markdown (.md)
+                                </button>
+                                <button class="download-option" data-format="csv">
+                                    <i class="fas fa-file-csv"></i> CSV (.csv)
+                                </button>
+                            </div>
+                        </div>
+                        <button id="clearAllBtn" class="clear-btn" title="Clear all notes">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="notes-list" id="notesList">
+                    <!-- Saved notes will appear here -->
+                </div>
+            </div>
+
+            <!-- Right Content Area -->
+            <div class="content-area">
+                <!-- YouTube Link Input -->
+                <div class="youtube-input-section">
+                    <div class="input-group">
+                        <label for="youtubeLink">YouTube Video URL:</label>
+                        <div class="input-container">
+                            <input type="url" id="youtubeLink" placeholder="https://www.youtube.com/watch?v=..." />
+                            <button id="loadVideoBtn" class="load-btn">
+                                <i class="fas fa-play"></i> Load Video
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Video Preview -->
+                    <div id="videoPreview" class="video-preview" style="display: none;">
+                        <div id="videoContainer"></div>
+                        <div class="video-info">
+                            <h4 id="videoTitle"></h4>
+                            <p id="videoChannel"></p>
+                        </div>
+                        <div class="video-actions">
+                            <button id="descriptionBtn" class="info-btn"><i class="fas fa-info-circle"></i> Description</button>
+                            <button id="transcriptBtn" class="info-btn"><i class="fas fa-closed-captioning"></i> Transcript</button>
+                        </div>
+                        <div id="videoExtraInfo" class="video-extra-info" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- Note Editor Section -->
+                <div class="note-editor-section">
+                    <div class="editor-header">
+                        <h3><i class="fas fa-edit"></i> Note Editor</h3>
+                        <div class="editor-controls">
+                            <button id="previewBtn" class="preview-btn"><i class="fas fa-eye"></i> Preview</button>
+                            <button id="saveNoteBtn" class="save-btn">
+                                <i class="fas fa-save"></i> Save Note
+                            </button>
+                            <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle Fullscreen">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="note-title-group">
+                        <input type="text" id="noteTitleInput" placeholder="Note Title..." maxlength="100" />
+                    </div>
+
+                    <!-- Toolbar -->
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <button id="boldBtn" class="tool-btn" title="Bold (Ctrl+B)">
+                                <i class="fas fa-bold"></i>
+                            </button>
+                            <button id="italicBtn" class="tool-btn" title="Italic (Ctrl+I)">
+                                <i class="fas fa-italic"></i>
+                            </button>
+                            <button id="codeBtn" class="tool-btn" title="Code Block">
+                                <i class="fas fa-code"></i>
+                            </button>
+                            <button id="quoteBtn" class="tool-btn" title="Quote Block">
+                                <i class="fas fa-quote-left"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="toolbar-group">
+                            <button id="h1Btn" class="tool-btn" title="Header 1">H1</button>
+                            <button id="h2Btn" class="tool-btn" title="Header 2">H2</button>
+                            <button id="h3Btn" class="tool-btn" title="Header 3">H3</button>
+                        </div>
+                        
+                        <div class="toolbar-group">
+                            <button id="bulletListBtn" class="tool-btn" title="Bullet List">
+                                <i class="fas fa-list-ul"></i>
+                            </button>
+                            <button id="numberListBtn" class="tool-btn" title="Numbered List">
+                                <i class="fas fa-list-ol"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="toolbar-group">
+                            <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Text Editor -->
+                    <div class="editor-container">
+                        <textarea id="noteEditor" placeholder="Start taking notes here... Use the toolbar above to format your text with markdown syntax."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Modal -->
+    <div id="fullscreenModal" class="fullscreen-modal">
+        <div class="fullscreen-content">
+            <div class="fullscreen-header">
+                <h3>Note Editor - Fullscreen Mode</h3>
+                <button id="exitFullscreenBtn" class="exit-fullscreen-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="fullscreen-toolbar">
+                <div class="toolbar-group">
+                    <button id="fsBoldBtn" class="tool-btn" title="Bold (Ctrl+B)">
+                        <i class="fas fa-bold"></i>
+                    </button>
+                    <button id="fsItalicBtn" class="tool-btn" title="Italic (Ctrl+I)">
+                        <i class="fas fa-italic"></i>
+                    </button>
+                    <button id="fsCodeBtn" class="tool-btn" title="Code Block">
+                        <i class="fas fa-code"></i>
+                    </button>
+                    <button id="fsQuoteBtn" class="tool-btn" title="Quote Block">
+                        <i class="fas fa-quote-left"></i>
+                    </button>
+                </div>
+                
+                <div class="toolbar-group">
+                    <button id="fsH1Btn" class="tool-btn" title="Header 1">H1</button>
+                    <button id="fsH2Btn" class="tool-btn" title="Header 2">H2</button>
+                    <button id="fsH3Btn" class="tool-btn" title="Header 3">H3</button>
+                </div>
+                
+                <div class="toolbar-group">
+                    <button id="fsBulletListBtn" class="tool-btn" title="Bullet List">
+                        <i class="fas fa-list-ul"></i>
+                    </button>
+                    <button id="fsNumberListBtn" class="tool-btn" title="Numbered List">
+                        <i class="fas fa-list-ol"></i>
+                    </button>
+                </div>
+                
+                <div class="toolbar-group">
+                    <button id="fsUndoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                    <button id="fsRedoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
+                        <i class="fas fa-redo"></i>
+                    </button>
+                </div>
+            </div>
+            <textarea id="fullscreenEditor" placeholder="Start taking notes here... Use the toolbar above to format your text with markdown syntax."></textarea>
+        </div>
+    </div>
+
+    <!-- Markdown Preview Modal -->
+    <div id="previewModal" class="preview-modal">
+        <div class="preview-content">
+            <div class="preview-header">
+                <h3>Note Preview</h3>
+                <button id="closePreviewBtn" class="close-preview-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="markdownPreview" class="markdown-preview"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
