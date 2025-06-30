@@ -417,7 +417,7 @@ class YouTubeNoteTaker {
         this.videoExtraInfo.style.display = 'block';
         this.videoExtraInfo.dataset.type = 'transcript';
         try {
-            const response = await fetch(`http://localhost:8080/api/transcript/${this.currentVideoId}`);
+            const response = await fetch(`https://youtube-note-taker-backend.onrender.com/api/transcript/${this.currentVideoId}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch transcript');
             }
