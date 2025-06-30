@@ -9,7 +9,10 @@ const MARKED_CDN = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
 
 class YouTubeNoteTaker {
     constructor() {
-        this.notes = JSON.parse(localStorage.getItem('youtubeNotes')) || [];
+        // Check for pendingNote (from dashboard)
+        this.pendingNote = this.getPendingNote();
+        this.videoId = this.pendingNote?.videoId || null;
+        this.notes = this.loadNotesForVideo();
         this.currentNoteId = null;
         this.undoStack = [];
         this.redoStack = [];
@@ -25,10 +28,75 @@ class YouTubeNoteTaker {
         this.transcriptEntries = [];
         this.masterTitle = localStorage.getItem('masterTitle') || '';
         
+        // Authentication
+        this.authManager = null;
+        
         this.initializeElements();
+        this.initializeAuth();
+        this.prefillFromPendingNote(); // Prefill if coming from dashboard
         this.bindEvents();
         this.loadNotes();
         this.loadSharedNotes(); // Check for shared links
+    }
+
+    initializeAuth() {
+        // Initialize auth manager if available
+        if (window.AuthManager) {
+            this.authManager = new AuthManager();
+            // Update the note page auth UI to use the new topbar-auth container
+            this.updateAuthUI();
+        }
+    }
+
+    updateAuthUI() {
+        // The AuthManager will handle updating the topbar-auth container
+        // We just need to ensure it's properly initialized
+        if (this.authManager) {
+            // Force update the auth UI
+            this.authManager.updateAuthUI();
+        }
+    }
+
+    getPendingNote() {
+        const pending = localStorage.getItem('pendingNote');
+        if (pending) {
+            try {
+                const obj = JSON.parse(pending);
+                localStorage.removeItem('pendingNote');
+                return obj;
+            } catch (e) {}
+            localStorage.removeItem('pendingNote');
+        }
+        return null;
+    }
+
+    loadNotesForVideo() {
+        if (this.pendingNote && this.pendingNote.videoId) {
+            // New note for a new video: start fresh
+            return [];
+        }
+        // If videoId is present (from dashboard or sidebar), load notes for that video
+        const videoId = this.pendingNote?.videoId || null;
+        if (videoId) {
+            return JSON.parse(localStorage.getItem('youtubeNotes_' + videoId) || '[]');
+        }
+        // Fallback: load all notes (legacy)
+        return JSON.parse(localStorage.getItem('youtubeNotes') || '[]');
+    }
+
+    prefillFromPendingNote() {
+        if (this.pendingNote) {
+            const { url, title, videoId } = this.pendingNote;
+            if (url && this.youtubeLinkInput) this.youtubeLinkInput.value = url;
+            if (title && document.getElementById('masterTitleInput')) {
+                document.getElementById('masterTitleInput').value = title;
+                this.masterTitle = title;
+                localStorage.setItem('masterTitle', title);
+            }
+            if (videoId) {
+                this.currentVideoId = videoId;
+            }
+        }
     }
 
     initializeElements() {
@@ -66,7 +134,8 @@ class YouTubeNoteTaker {
             undo: document.getElementById('undoBtn'),
             redo: document.getElementById('redoBtn'),
             fullscreen: document.getElementById('fullscreenBtn'),
-            preview: document.getElementById('previewBtn')
+            preview: document.getElementById('previewBtn'),
+            image: document.getElementById('imageBtn')
         };
         
         // Fullscreen toolbar buttons
@@ -83,7 +152,8 @@ class YouTubeNoteTaker {
             undo: document.getElementById('fsUndoBtn'),
             redo: document.getElementById('fsRedoBtn'),
             fullscreen: document.getElementById('fsFullscreenBtn'),
-            preview: document.getElementById('fsPreviewBtn')
+            preview: document.getElementById('fsPreviewBtn'),
+            image: document.getElementById('fsImageBtn')
         };
 
         this.descriptionBtn = document.getElementById('descriptionBtn');
@@ -100,6 +170,7 @@ class YouTubeNoteTaker {
         this.transcriptSearchInput = document.getElementById('transcriptSearchInput');
         this.transcriptSearchResults = document.getElementById('transcriptSearchResults');
         this.transcriptCreateBtn = document.getElementById('transcriptCreateBtn');
+        this.transcriptCopyBtn = document.getElementById('transcriptCopyBtn');
         this.transcriptDownloadBtn = document.getElementById('transcriptDownloadBtn');
         this.transcriptContainer = document.getElementById('transcriptContainer');
         
@@ -115,6 +186,32 @@ class YouTubeNoteTaker {
         
         // Preview modal
         this.previewModal = document.getElementById('previewModal');
+
+        // Image file inputs
+        this.imageFileInput = document.getElementById('imageFileInput');
+        this.fsImageFileInput = document.getElementById('fsImageFileInput');
+
+        // Image button event listeners
+        if (this.toolbarButtons.image && this.imageFileInput) {
+            this.toolbarButtons.image.addEventListener('click', () => this.imageFileInput.click());
+            this.imageFileInput.addEventListener('change', (e) => this.handleImageFile(e, this.noteEditor));
+        }
+        if (this.fsToolbarButtons.image && this.fsImageFileInput) {
+            this.fsToolbarButtons.image.addEventListener('click', () => this.fsImageFileInput.click());
+            this.fsImageFileInput.addEventListener('change', (e) => this.handleImageFile(e, this.fullscreenEditor));
+        }
+
+        // Drag and drop for editors
+        this.noteEditor.addEventListener('dragover', (e) => this.handleDragOver(e));
+        this.noteEditor.addEventListener('drop', (e) => this.handleDrop(e, this.noteEditor));
+        this.fullscreenEditor.addEventListener('dragover', (e) => this.handleDragOver(e));
+        this.fullscreenEditor.addEventListener('drop', (e) => this.handleDrop(e, this.fullscreenEditor));
+
+        // Notes search input
+        this.notesSearchInput = document.getElementById('notesSearchInput');
+        if (this.notesSearchInput) {
+            this.notesSearchInput.addEventListener('input', () => this.filterNotesList());
+        }
     }
 
     bindEvents() {
@@ -158,6 +255,7 @@ class YouTubeNoteTaker {
         // Transcript features
         if (this.transcriptSearchInput) this.transcriptSearchInput.addEventListener('input', () => this.searchTranscript());
         if (this.transcriptCreateBtn) this.transcriptCreateBtn.addEventListener('click', () => this.createNoteFromSelection());
+        if (this.transcriptCopyBtn) this.transcriptCopyBtn.addEventListener('click', () => this.copyTranscriptSelectionToNote());
         if (this.transcriptDownloadBtn) this.transcriptDownloadBtn.addEventListener('click', () => this.downloadTranscript());
         
         // Autotranscribe features
@@ -185,6 +283,8 @@ class YouTubeNoteTaker {
         this.toolbarButtons.quote.addEventListener('click', () => this.applyFormat('quote'));
         this.toolbarButtons.code.addEventListener('click', () => this.applyFormat('code'));
         this.toolbarButtons.link.addEventListener('click', () => this.applyFormat('link'));
+        this.toolbarButtons.image = document.getElementById('imageBtn');
+        if (this.toolbarButtons.image) this.toolbarButtons.image.addEventListener('click', () => this.applyFormat('image'));
         this.toolbarButtons.trash.addEventListener('click', () => {
             if (confirm('Are you sure you want to clear all text in this note? This action cannot be undone.')) {
                 this.clearEditorContentOnly();
@@ -204,6 +304,8 @@ class YouTubeNoteTaker {
         this.fsToolbarButtons.quote.addEventListener('click', () => this.applyFullscreenFormat('quote'));
         this.fsToolbarButtons.code.addEventListener('click', () => this.applyFullscreenFormat('code'));
         this.fsToolbarButtons.link.addEventListener('click', () => this.applyFullscreenFormat('link'));
+        this.fsToolbarButtons.image = document.getElementById('fsImageBtn');
+        if (this.fsToolbarButtons.image) this.fsToolbarButtons.image.addEventListener('click', () => this.applyFullscreenFormat('image'));
         this.fsToolbarButtons.trash.addEventListener('click', () => {
             if (confirm('Are you sure you want to clear all text in this note? This action cannot be undone.')) {
                 this.clearEditorContentOnly();
@@ -517,6 +619,9 @@ class YouTubeNoteTaker {
                             <button id="transcriptCreateBtn" class="transcript-btn transcript-btn-success" title="Create note from selected text">
                                 <i class="fas fa-plus"></i> Create Note
                             </button>
+                            <button id="transcriptCopyBtn" class="transcript-btn transcript-btn-primary" title="Copy selected text to note">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
                             <button id="transcriptDownloadBtn" class="transcript-btn transcript-btn-secondary" title="Download transcript">
                                 <i class="fas fa-download"></i> Download
                             </button>
@@ -544,12 +649,14 @@ class YouTubeNoteTaker {
                 this.transcriptSearchInput = document.getElementById('transcriptSearchInput');
                 this.transcriptSearchResults = document.getElementById('transcriptSearchResults');
                 this.transcriptCreateBtn = document.getElementById('transcriptCreateBtn');
+                this.transcriptCopyBtn = document.getElementById('transcriptCopyBtn');
                 this.transcriptDownloadBtn = document.getElementById('transcriptDownloadBtn');
                 this.transcriptContainer = document.getElementById('transcriptContainer');
                 
                 // Add event listeners
                 if (this.transcriptSearchInput) this.transcriptSearchInput.addEventListener('input', () => this.searchTranscript());
                 if (this.transcriptCreateBtn) this.transcriptCreateBtn.addEventListener('click', () => this.createNoteFromSelection());
+                if (this.transcriptCopyBtn) this.transcriptCopyBtn.addEventListener('click', () => this.copyTranscriptSelectionToNote());
                 if (this.transcriptDownloadBtn) this.transcriptDownloadBtn.addEventListener('click', () => this.downloadTranscript());
                 
                 // Set initial state of Create Note button
@@ -571,6 +678,26 @@ class YouTubeNoteTaker {
             console.error('Transcript fetch error:', error);
             this.videoExtraInfo.innerHTML = 'Transcript not available for this video. Make sure the server is running on port 8080.';
         }
+    }
+
+    copyTranscriptSelectionToNote() {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        if (!selectedText) {
+            this.showMessage('Please select some text from the transcript first', 'error');
+            return;
+        }
+        // Determine which editor is active
+        const editor = document.fullscreenElement ? this.fullscreenEditor : this.noteEditor;
+        editor.value += (editor.value && !editor.value.endsWith('\n') ? '\n' : '') + selectedText + '\n';
+        if (editor === this.noteEditor) {
+            this.handleEditorChange();
+        } else {
+            this.handleFullscreenEditorChange();
+        }
+        this.showMessage('Transcript text copied to note!', 'success');
+        // Optionally clear selection
+        selection.removeAllRanges();
     }
 
     addTranscriptTimeListeners() {
@@ -730,7 +857,13 @@ class YouTubeNoteTaker {
                 newCursorPos = start + 2;
                 break;
             case 'code':
-                formattedText = `\`\`\`\n${selectedText}\n\`\`\``;
+                formattedText = `\
+\
+\
+${selectedText}\
+\
+\
+`;
                 newCursorPos = start + 4;
                 break;
             case 'quote':
@@ -762,38 +895,39 @@ class YouTubeNoteTaker {
                 newCursorPos = start + 7;
                 break;
             case 'bulletList':
-                console.log('Bullet list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
                 if (selectedText === '') {
                     formattedText = `* `;
                     newCursorPos = start + 2;
-                    console.log('Empty selection - adding:', `"${formattedText}"`);
                 } else {
                     formattedText = `* ${selectedText}`;
                     newCursorPos = start + 2;
-                    console.log('Text selected - adding:', `"${formattedText}"`);
                 }
                 break;
             case 'numberList':
-                console.log('Number list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
                 if (selectedText === '') {
                     formattedText = `1. `;
                     newCursorPos = start + 3;
-                    console.log('Empty selection - adding:', `"${formattedText}"`);
                 } else {
                     formattedText = `1. ${selectedText}`;
                     newCursorPos = start + 3;
-                    console.log('Text selected - adding:', `"${formattedText}"`);
                 }
                 break;
             case 'link':
                 formattedText = `[${selectedText}](${selectedText})`;
                 newCursorPos = start + selectedText.length + 3;
                 break;
+            case 'image':
+                const imageUrl = prompt('Enter the image URL:');
+                if (!imageUrl) return;
+                const altText = prompt('Enter alt text for the image (optional):', 'Image');
+                formattedText = `![${altText || 'Image'}](${imageUrl})`;
+                newCursorPos = start + formattedText.length;
+                break;
         }
 
         const newText = beforeText + formattedText + afterText;
         textarea.value = newText;
-        textarea.setSelectionRange(newCursorPos, newCursorPos + selectedText.length);
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
         textarea.focus();
         
         this.handleEditorChange();
@@ -824,7 +958,13 @@ class YouTubeNoteTaker {
                 newCursorPos = start + 2;
                 break;
             case 'code':
-                formattedText = `\`\`\`\n${selectedText}\n\`\`\``;
+                formattedText = `\
+\
+\
+${selectedText}\
+\
+\
+`;
                 newCursorPos = start + 4;
                 break;
             case 'quote':
@@ -856,38 +996,39 @@ class YouTubeNoteTaker {
                 newCursorPos = start + 7;
                 break;
             case 'bulletList':
-                console.log('Bullet list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
                 if (selectedText === '') {
                     formattedText = `* `;
                     newCursorPos = start + 2;
-                    console.log('Empty selection - adding:', `"${formattedText}"`);
                 } else {
                     formattedText = `* ${selectedText}`;
                     newCursorPos = start + 2;
-                    console.log('Text selected - adding:', `"${formattedText}"`);
                 }
                 break;
             case 'numberList':
-                console.log('Number list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
                 if (selectedText === '') {
                     formattedText = `1. `;
                     newCursorPos = start + 3;
-                    console.log('Empty selection - adding:', `"${formattedText}"`);
                 } else {
                     formattedText = `1. ${selectedText}`;
                     newCursorPos = start + 3;
-                    console.log('Text selected - adding:', `"${formattedText}"`);
                 }
                 break;
             case 'link':
                 formattedText = `[${selectedText}](${selectedText})`;
                 newCursorPos = start + selectedText.length + 3;
                 break;
+            case 'image':
+                const imageUrl = prompt('Enter the image URL:');
+                if (!imageUrl) return;
+                const altText = prompt('Enter alt text for the image (optional):', 'Image');
+                formattedText = `![${altText || 'Image'}](${imageUrl})`;
+                newCursorPos = start + formattedText.length;
+                break;
         }
 
         const newText = beforeText + formattedText + afterText;
         textarea.value = newText;
-        textarea.setSelectionRange(newCursorPos, newCursorPos + selectedText.length);
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
         textarea.focus();
         
         this.handleFullscreenEditorChange();
@@ -1161,7 +1302,17 @@ class YouTubeNoteTaker {
         });
     }
 
-    loadNotes() {
+    loadNotes(notesToShow) {
+        // Load notes for the current videoId if present
+        if (this.videoId) {
+            this.notes = JSON.parse(localStorage.getItem('youtubeNotes_' + this.videoId) || '[]');
+        } else {
+            this.notes = JSON.parse(localStorage.getItem('youtubeNotes') || '[]');
+        }
+        this.renderNotesList();
+    }
+
+    renderNotesList() {
         this.notesList.innerHTML = '';
         if (this.notes.length === 0) {
             this.notesList.innerHTML = '<p style="text-align: center; color: #6c757d; font-style: italic;">No saved notes yet</p>';
@@ -1233,14 +1384,11 @@ class YouTubeNoteTaker {
         this.currentNoteId = note.id;
         this.noteEditor.value = note.content || '';
         this.noteTitleInput.value = note.title || '';
-        
         // Update video URL without reloading if it's the same video
         const currentVideoId = this.extractYouTubeVideoId(this.youtubeLinkInput.value);
         const newVideoId = this.extractYouTubeVideoId(note.videoUrl || '');
-        
         if (note.videoUrl) {
             this.youtubeLinkInput.value = note.videoUrl;
-            
             if (currentVideoId === newVideoId && this.player) {
                 // Same video, just seek to timestamp
                 if (note.videoTimestamp) {
@@ -1250,7 +1398,9 @@ class YouTubeNoteTaker {
                     }
                 }
             } else {
-                // Different video, load new video
+                // Different video, load new video and notes for that video
+                this.videoId = newVideoId;
+                this.notes = JSON.parse(localStorage.getItem('youtubeNotes_' + this.videoId) || '[]');
                 this.loadYouTubeVideo().then(() => {
                     // Seek to timestamp if available
                     if (note.videoTimestamp && this.player && typeof this.player.seekTo === 'function') {
@@ -1262,20 +1412,18 @@ class YouTubeNoteTaker {
                         }
                     }
                 });
+                this.renderNotesList();
             }
         } else {
             this.videoPreview.style.display = 'none';
         }
-        
         // Update active state in sidebar
         document.querySelectorAll('.note-item').forEach(item => {
             item.classList.remove('active');
         });
         document.querySelector(`[data-note-id="${note.id}"]`).classList.add('active');
-        
         // Clear undo/redo stacks
         this.undoStack = [];
-        this.redoStack = [];
     }
 
     parseTimestampToSeconds(timestamp) {
@@ -1315,7 +1463,11 @@ class YouTubeNoteTaker {
     }
 
     saveToLocalStorage() {
-        localStorage.setItem('youtubeNotes', JSON.stringify(this.notes));
+        if (this.videoId) {
+            localStorage.setItem('youtubeNotes_' + this.videoId, JSON.stringify(this.notes));
+        } else {
+            localStorage.setItem('youtubeNotes', JSON.stringify(this.notes));
+        }
     }
 
     showMessage(message, type = 'success') {
@@ -1999,6 +2151,69 @@ class YouTubeNoteTaker {
         this.masterTitle = this.masterTitleInput.value.trim();
         localStorage.setItem('masterTitle', this.masterTitle);
         this.showMessage('Master title saved successfully!', 'success');
+    }
+
+    handleImageFile(e, editor) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64 = e.target.result;
+                const markdown = `![Image](${base64})`;
+                editor.value += markdown;
+                this.handleEditorChange();
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    }
+
+    handleDrop(e, editor) {
+        e.preventDefault();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64 = event.target.result;
+                    const markdown = `![Image](${base64})`;
+                    editor.value += markdown;
+                    if (editor === this.noteEditor) {
+                        this.handleEditorChange();
+                    } else {
+                        this.handleFullscreenEditorChange();
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        } else {
+            const data = e.dataTransfer.getData('text');
+            editor.value += data;
+            if (editor === this.noteEditor) {
+                this.handleEditorChange();
+            } else {
+                this.handleFullscreenEditorChange();
+            }
+        }
+    }
+
+    filterNotesList() {
+        const query = this.notesSearchInput.value.trim().toLowerCase();
+        if (!query) {
+            this.loadNotes();
+            return;
+        }
+        const filteredNotes = this.notes.filter(note => {
+            return (
+                (note.title && note.title.toLowerCase().includes(query)) ||
+                (note.content && note.content.toLowerCase().includes(query))
+            );
+        });
+        this.loadNotes(filteredNotes);
     }
 }
 

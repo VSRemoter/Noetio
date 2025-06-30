@@ -3,302 +3,162 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Note Taker</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Dashboard | YouTube Note Taker</title>
+    <link rel="stylesheet" href="dashboard.css?v=1.1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1><i class="fab fa-youtube"></i> YouTube Note Taker</h1>
-            <p>Take notes on your favorite YouTube videos</p>
-        </header>
-
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Left Sidebar - Saved Notes -->
-            <div class="sidebar">
-                <div class="sidebar-header">
-                    <h3><i class="fas fa-bookmark"></i> Saved Notes</h3>
-                    <div class="sidebar-controls">
-                        <div class="download-container">
-                            <button id="downloadBtn" class="btn btn-secondary">
-                                <i class="fas fa-download"></i> Download
-                            </button>
-                            <div id="downloadMenu" class="download-menu">
-                                <div class="download-option" data-format="markdown">Markdown (.md)</div>
-                                <div class="download-option" data-format="copy-markdown">Copy Markdown</div>
-                                <div class="download-option" data-format="csv">CSV (.csv)</div>
-                            </div>
-                        </div>
-                        <button id="shareBtn" class="btn btn-secondary">
-                            <i class="fas fa-share-alt"></i> Share
-                        </button>
-                        <button id="clearAllBtn" class="btn btn-danger" title="Clear all notes">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="notes-list" id="notesList">
-                    <!-- Saved notes will appear here -->
-                </div>
+    <div id="dashboardApp">
+        <!-- Sidebar -->
+        <aside class="dashboard-sidebar">
+            <div class="sidebar-logo">
+                <i class="fas fa-film"></i> <span>YouTube Notes</span>
             </div>
-
-            <!-- Right Content Area -->
-            <div class="content-area">
-                <!-- Master Title -->
-                <div class="master-title-section">
-                    <div class="master-title-group">
-                        <label for="masterTitleInput">Master Title:</label>
-                        <input type="text" id="masterTitleInput" placeholder="Enter a title for your notes collection..." maxlength="200" />
+            <nav class="sidebar-nav">
+                <button class="sidebar-btn active" id="sidebarVideosBtn"><i class="fas fa-th-large"></i> Videos</button>
+                <button class="sidebar-btn" id="sidebarSettingsBtn"><i class="fas fa-cog"></i> Settings</button>
+            </nav>
+        </aside>
+        <!-- Main Content -->
+        <div class="dashboard-main">
+            <!-- Topbar -->
+            <header class="dashboard-topbar">
+                <div class="topbar-title">Dashboard</div>
+                <div class="topbar-auth">
+                    <button class="topbar-btn" id="signUpBtn">Sign Up</button>
+                    <button class="topbar-btn" id="loginBtn">Login</button>
+                    <button class="topbar-btn" id="debugBtn" style="background: #ff6b6b; color: white;">Debug</button>
+                </div>
+            </header>
+            <!-- Main Section -->
+            <main class="dashboard-content">
+                <div class="dashboard-controls">
+                    <input type="text" id="dashboardSearchInput" class="dashboard-search" placeholder="Search by title, channel, or tag...">
+                    <button id="createNoteBtn" class="dashboard-action-btn"><i class="fas fa-plus"></i> Create New Note</button>
+                    <button id="createPlaylistBtn" class="dashboard-action-btn"><i class="fas fa-list"></i> Create Playlist</button>
+                </div>
+                <div class="dashboard-playlists-section">
+                    <div id="playlistsContainer" class="playlists-container">
+                        <!-- Playlists will be rendered here -->
                     </div>
                 </div>
-                
-                <!-- YouTube Link Input -->
-                <div class="youtube-input-section">
-                    <div class="input-group">
-                        <label for="youtubeLink">YouTube Video URL:</label>
-                        <div class="input-container">
-                            <input type="url" id="youtubeLink" placeholder="https://www.youtube.com/watch?v=..." />
-                            <button id="loadVideoBtn" class="load-btn">
-                                <i class="fas fa-play"></i> Load Video
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Video Preview -->
-                    <div id="videoPreview" class="video-preview" style="display: none;">
-                        <div id="videoContainer"></div>
-                        <div class="video-info">
-                            <h4 id="videoTitle"></h4>
-                            <p id="videoChannel"></p>
-                        </div>
-                        <div class="video-actions">
-                            <button id="descriptionBtn" class="info-btn"><i class="fas fa-info-circle"></i> Description</button>
-                            <button id="transcriptBtn" class="info-btn"><i class="fas fa-closed-captioning"></i> Transcript</button>
-                        </div>
-                        <div id="videoExtraInfo" class="video-extra-info" style="display:none;"></div>
+                <div class="dashboard-videos-section">
+                    <div id="videosGrid" class="videos-grid">
+                        <!-- Video note boxes will be rendered here -->
                     </div>
                 </div>
-
-                <!-- Note Editor Section -->
-                <div class="note-editor-section">
-                    <div class="editor-header">
-                        <h3><i class="fas fa-edit"></i> Note Editor</h3>
-                    </div>
-                    <div class="note-title-group">
-                        <div class="timestamp-input-group">
-                            <label for="manualTimestamp">Video Timestamp:</label>
-                            <div class="timestamp-input-container">
-                                <input type="text" id="manualTimestamp" placeholder="0:00" maxlength="8" />
-                                <button id="syncTimestampBtn" class="sync-btn" title="Sync with current video time">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <input type="text" id="noteTitleInput" placeholder="Note Title..." maxlength="100" />
-                    </div>
-
-                    <!-- Toolbar -->
-                    <div class="toolbar">
-                        <div class="toolbar-group">
-                            <div class="header-dropdown">
-                                <button class="tool-btn header-btn" title="Headers">
-                                    <i class="fas fa-heading"></i>
-                                </button>
-                                <div class="header-menu">
-                                    <button class="header-option" data-level="1">Header 1</button>
-                                    <button class="header-option" data-level="2">Header 2</button>
-                                    <button class="header-option" data-level="3">Header 3</button>
-                                    <button class="header-option" data-level="4">Header 4</button>
-                                    <button class="header-option" data-level="5">Header 5</button>
-                                    <button class="header-option" data-level="6">Header 6</button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="boldBtn" class="tool-btn" title="Bold (Ctrl+B)">
-                                <i class="fas fa-bold"></i>
-                            </button>
-                            <button id="italicBtn" class="tool-btn" title="Italic (Ctrl+I)">
-                                <i class="fas fa-italic"></i>
-                            </button>
-                            <button id="strikethroughBtn" class="tool-btn" title="Strikethrough (Ctrl+S)">
-                                <i class="fas fa-strikethrough"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="bulletListBtn" class="tool-btn" title="Bullet List">
-                                <i class="fas fa-list-ul"></i>
-                            </button>
-                            <button id="numberListBtn" class="tool-btn" title="Numbered List">
-                                <i class="fas fa-list-ol"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="quoteBtn" class="tool-btn" title="Quote Block">
-                                <i class="fas fa-quote-left"></i>
-                            </button>
-                            <button id="codeBtn" class="tool-btn" title="Code Block">
-                                <i class="fas fa-code"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="linkBtn" class="tool-btn" title="Insert Link">
-                                <i class="fas fa-link"></i>
-                            </button>
-                            <button id="trashBtn" class="tool-btn" title="Clear All Text">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
-                                <i class="fas fa-undo"></i>
-                            </button>
-                            <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
-                                <i class="fas fa-redo"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="fullscreenBtn" class="tool-btn" title="Fullscreen Editor">
-                                <i class="fas fa-expand"></i>
-                            </button>
-                            <button id="previewBtn" class="tool-btn" title="Preview All Notes">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                            <button id="autotranscribeBtn" class="tool-btn" title="Auto-transcribe from video">
-                                <i class="fas fa-microphone"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Text Editor -->
-                    <div class="editor-container">
-                        <textarea id="noteEditor" placeholder="Start taking notes here... Use the toolbar above to format your text with markdown syntax."></textarea>
-                        <div class="save-note-container">
-                            <button id="saveNoteBtn" class="save-note-btn">
-                                <i class="fas fa-save"></i> Save Note
-                            </button>
-                        </div>
-                    </div>
+            </main>
+            <!-- Settings Section (hidden by default) -->
+            <section class="dashboard-settings" id="dashboardSettingsSection" style="display:none;">
+                <h2>Settings</h2>
+                <div class="settings-fake">
+                    <p><strong>Email:</strong> <span id="userEmail">user@example.com</span></p>
                 </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Create Note Modal -->
+    <div id="createNoteModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h2>Create New Note</h2>
+            <label for="modalMasterTitle">Title (Master Title):</label>
+            <input type="text" id="modalMasterTitle" maxlength="200" placeholder="Enter a title for your notes collection..." />
+            <label for="modalVideoUrl">YouTube Video URL:</label>
+            <input type="url" id="modalVideoUrl" maxlength="200" placeholder="https://www.youtube.com/watch?v=..." />
+            <div class="modal-actions">
+                <button id="modalCreateBtn" class="dashboard-action-btn"><i class="fas fa-plus"></i> Create</button>
+                <button id="modalCancelBtn" class="dashboard-action-btn" style="background:#eee;color:#232946;"><i class="fas fa-times"></i> Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- Fullscreen Modal -->
-    <div id="fullscreenModal" class="fullscreen-modal">
-        <div class="fullscreen-content">
-            <div class="fullscreen-header">
-                <h3>Note Editor - Fullscreen Mode</h3>
-                <button id="exitFullscreenBtn" class="exit-fullscreen-btn">
+    <!-- Authentication Modal -->
+    <div id="authModal" class="modal" style="display:none;">
+        <div class="modal-content auth-modal-content">
+            <div class="auth-header">
+                <h2 id="authModalTitle">Login</h2>
+                <button class="close-btn" id="closeAuthModal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="fullscreen-toolbar">
-                <div class="toolbar-group">
-                    <div class="header-dropdown">
-                        <button class="tool-btn header-btn" title="Headers">
-                            <i class="fas fa-heading"></i>
-                        </button>
-                        <div class="header-menu">
-                            <button class="header-option" data-level="1">Header 1</button>
-                            <button class="header-option" data-level="2">Header 2</button>
-                            <button class="header-option" data-level="3">Header 3</button>
-                            <button class="header-option" data-level="4">Header 4</button>
-                            <button class="header-option" data-level="5">Header 5</button>
-                            <button class="header-option" data-level="6">Header 6</button>
-                        </div>
-                    </div>
+            <form id="authForm" class="auth-form">
+                <div class="form-group" id="firstNameGroup" style="display:none;">
+                    <label for="authFirstName">First Name:</label>
+                    <input type="text" id="authFirstName" name="firstName" placeholder="Enter your first name">
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsBoldBtn" class="tool-btn" title="Bold (Ctrl+B)">
-                        <i class="fas fa-bold"></i>
-                    </button>
-                    <button id="fsItalicBtn" class="tool-btn" title="Italic (Ctrl+I)">
-                        <i class="fas fa-italic"></i>
-                    </button>
-                    <button id="fsStrikethroughBtn" class="tool-btn" title="Strikethrough (Ctrl+S)">
-                        <i class="fas fa-strikethrough"></i>
-                    </button>
+                <div class="form-group" id="lastNameGroup" style="display:none;">
+                    <label for="authLastName">Last Name:</label>
+                    <input type="text" id="authLastName" name="lastName" placeholder="Enter your last name">
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsBulletListBtn" class="tool-btn" title="Bullet List">
-                        <i class="fas fa-list-ul"></i>
-                    </button>
-                    <button id="fsNumberListBtn" class="tool-btn" title="Numbered List">
-                        <i class="fas fa-list-ol"></i>
-                    </button>
+                <div class="form-group">
+                    <label for="authEmail">Email:</label>
+                    <input type="email" id="authEmail" name="email" required placeholder="Enter your email">
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsQuoteBtn" class="tool-btn" title="Quote Block">
-                        <i class="fas fa-quote-left"></i>
-                    </button>
-                    <button id="fsCodeBtn" class="tool-btn" title="Code Block">
-                        <i class="fas fa-code"></i>
-                    </button>
+                <div class="form-group">
+                    <label for="authPassword">Password:</label>
+                    <input type="password" id="authPassword" name="password" required placeholder="Enter your password">
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsLinkBtn" class="tool-btn" title="Insert Link">
-                        <i class="fas fa-link"></i>
-                    </button>
-                    <button id="fsTrashBtn" class="tool-btn" title="Clear All Text">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <div class="form-group" id="confirmPasswordGroup" style="display:none;">
+                    <label for="authConfirmPassword">Confirm Password:</label>
+                    <input type="password" id="authConfirmPassword" name="confirmPassword" placeholder="Confirm your password">
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsUndoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
-                        <i class="fas fa-undo"></i>
-                    </button>
-                    <button id="fsRedoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
-                        <i class="fas fa-redo"></i>
-                    </button>
+                <div class="form-actions">
+                    <button type="submit" id="authSubmitBtn" class="auth-submit-btn">Login</button>
                 </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsFullscreenBtn" class="tool-btn" title="Exit Fullscreen">
-                        <i class="fas fa-compress"></i>
-                    </button>
-                    <button id="fsPreviewBtn" class="tool-btn" title="Preview All Notes">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button id="fsAutotranscribeBtn" class="tool-btn" title="Auto-transcribe from video">
-                        <i class="fas fa-microphone"></i>
-                    </button>
-                </div>
+            </form>
+            <div class="auth-footer">
+                <button type="button" id="authSwitchBtn" class="auth-switch-btn">Don't have an account? Sign Up</button>
+                <button type="button" id="resendVerificationBtn" class="auth-switch-btn" style="display:none; margin-top: 10px;">Resend Verification Email</button>
             </div>
-            <textarea id="fullscreenEditor" placeholder="Start taking notes here... Use the toolbar above to format your text with markdown syntax."></textarea>
-            <div class="save-note-container">
-                <button id="fsSaveNoteBtn" class="save-note-btn">
-                    <i class="fas fa-save"></i> Save Note
+        </div>
+    </div>
+
+    <!-- User Profile Modal -->
+    <div id="userProfileModal" class="modal" style="display:none;">
+        <div class="modal-content auth-modal-content">
+            <div class="auth-header">
+                <h2>Account Settings</h2>
+                <button class="close-btn" id="closeUserProfileModal">
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
+            <form id="userProfileForm" class="auth-form">
+                <div class="form-group">
+                    <label for="profileFirstName">First Name:</label>
+                    <input type="text" id="profileFirstName" name="firstName" required>
+                </div>
+                <div class="form-group">
+                    <label for="profileLastName">Last Name:</label>
+                    <input type="text" id="profileLastName" name="lastName" required>
+                </div>
+                <div class="form-group">
+                    <label for="profileEmail">Email:</label>
+                    <input type="email" id="profileEmail" name="email" required readonly>
+                </div>
+                <div class="form-group">
+                    <label for="profileCurrentPassword">Current Password:</label>
+                    <input type="password" id="profileCurrentPassword" name="currentPassword" placeholder="Enter current password to save changes">
+                </div>
+                <div class="form-group">
+                    <label for="profileNewPassword">New Password (optional):</label>
+                    <input type="password" id="profileNewPassword" name="newPassword" placeholder="Leave blank to keep current password">
+                </div>
+                <div class="form-group">
+                    <label for="profileConfirmPassword">Confirm New Password:</label>
+                    <input type="password" id="profileConfirmPassword" name="confirmPassword" placeholder="Confirm new password">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="profileSubmitBtn" class="auth-submit-btn">Save Changes</button>
+                    <button type="button" id="profileLogoutBtn" class="auth-submit-btn" style="background: #dc3545;">Logout</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Markdown Preview Modal -->
-    <div id="previewModal" class="preview-modal">
-        <div class="preview-content">
-            <div class="preview-header">
-                <h3>Note Preview</h3>
-                <button id="closePreviewBtn" class="close-preview-btn"><i class="fas fa-times"></i></button>
-            </div>
-            <div id="markdownPreview" class="markdown-preview"></div>
-        </div>
-    </div>
-
-    <script src="script.js?v=2.3"></script>
+    <script src="supabase-config.js?v=1.2"></script>
+    <script src="dashboard.js?v=1.2"></script>
 </body>
 </html> 
