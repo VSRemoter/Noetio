@@ -1,1 +1,25 @@
- 
+{
+  "name": "youtube-note-taker",
+  "version": "1.0.0",
+  "description": "A YouTube note-taking application with transcript support and markdown editing",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 3000",
+    "build": "echo 'Static site - no build required'",
+    "dev": "python3 -m http.server 3000"
+  },
+  "keywords": [
+    "youtube",
+    "notes",
+    "transcript",
+    "markdown",
+    "note-taking"
+  ],
+  "author": "VSRemoter",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VSRemoter/Noetio.git"
+  },
+  "homepage": "https://noetio.netlify.app"
+} 
