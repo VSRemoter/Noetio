@@ -21,21 +21,20 @@
             <div class="sidebar">
                 <div class="sidebar-header">
                     <h3><i class="fas fa-bookmark"></i> Saved Notes</h3>
-                    <div class="sidebar-actions">
-                        <div class="download-dropdown">
-                            <button id="downloadBtn" class="download-btn" title="Download all saved notes">
-                                <i class="fas fa-download"></i> Download All Notes
+                    <div class="sidebar-controls">
+                        <div class="download-container">
+                            <button id="downloadBtn" class="btn btn-secondary">
+                                <i class="fas fa-download"></i> Download
                             </button>
-                            <div class="download-menu" id="downloadMenu">
-                                <button class="download-option" data-format="markdown">
-                                    <i class="fas fa-file-code"></i> Markdown (.md)
-                                </button>
-                                <button class="download-option" data-format="csv">
-                                    <i class="fas fa-file-csv"></i> CSV (.csv)
-                                </button>
+                            <div id="downloadMenu" class="download-menu">
+                                <div class="download-option" data-format="markdown">Markdown (.md)</div>
+                                <div class="download-option" data-format="csv">CSV (.csv)</div>
                             </div>
                         </div>
-                        <button id="clearAllBtn" class="clear-btn" title="Clear all notes">
+                        <button id="shareBtn" class="btn btn-secondary">
+                            <i class="fas fa-share-alt"></i> Share
+                        </button>
+                        <button id="clearAllBtn" class="btn btn-danger" title="Clear all notes">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -70,6 +69,15 @@
                             <button id="descriptionBtn" class="info-btn"><i class="fas fa-info-circle"></i> Description</button>
                             <button id="transcriptBtn" class="info-btn"><i class="fas fa-closed-captioning"></i> Transcript</button>
                         </div>
+                        <div class="timestamp-input-group">
+                            <label for="manualTimestamp">Video Timestamp:</label>
+                            <div class="timestamp-input-container">
+                                <input type="text" id="manualTimestamp" placeholder="0:00" maxlength="8" />
+                                <button id="syncTimestampBtn" class="sync-btn" title="Sync with current video time">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                        </div>
                         <div id="videoExtraInfo" class="video-extra-info" style="display:none;"></div>
                     </div>
                 </div>
@@ -79,13 +87,9 @@
                     <div class="editor-header">
                         <h3><i class="fas fa-edit"></i> Note Editor</h3>
                         <div class="editor-controls">
-                            <button id="previewBtn" class="preview-btn"><i class="fas fa-eye"></i> Preview</button>
-                            <button id="saveNoteBtn" class="save-btn">
-                                <i class="fas fa-save"></i> Save Note
-                            </button>
-                            <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle Fullscreen">
-                                <i class="fas fa-expand"></i>
-                            </button>
+                            <button id="saveNoteBtn" class="btn btn-primary">Save Note</button>
+                            <button id="descriptionBtn" class="btn btn-secondary">Description</button>
+                            <button id="transcriptBtn" class="btn btn-secondary">Transcript</button>
                         </div>
                     </div>
                     <div class="note-title-group">
@@ -95,24 +99,31 @@
                     <!-- Toolbar -->
                     <div class="toolbar">
                         <div class="toolbar-group">
+                            <div class="header-dropdown">
+                                <button class="tool-btn header-btn" title="Headers">
+                                    <i class="fas fa-heading"></i>
+                                </button>
+                                <div class="header-menu">
+                                    <button class="header-option" data-level="1">Header 1</button>
+                                    <button class="header-option" data-level="2">Header 2</button>
+                                    <button class="header-option" data-level="3">Header 3</button>
+                                    <button class="header-option" data-level="4">Header 4</button>
+                                    <button class="header-option" data-level="5">Header 5</button>
+                                    <button class="header-option" data-level="6">Header 6</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="toolbar-group">
                             <button id="boldBtn" class="tool-btn" title="Bold (Ctrl+B)">
                                 <i class="fas fa-bold"></i>
                             </button>
                             <button id="italicBtn" class="tool-btn" title="Italic (Ctrl+I)">
                                 <i class="fas fa-italic"></i>
                             </button>
-                            <button id="codeBtn" class="tool-btn" title="Code Block">
-                                <i class="fas fa-code"></i>
+                            <button id="strikethroughBtn" class="tool-btn" title="Strikethrough (Ctrl+S)">
+                                <i class="fas fa-strikethrough"></i>
                             </button>
-                            <button id="quoteBtn" class="tool-btn" title="Quote Block">
-                                <i class="fas fa-quote-left"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <button id="h1Btn" class="tool-btn" title="Header 1">H1</button>
-                            <button id="h2Btn" class="tool-btn" title="Header 2">H2</button>
-                            <button id="h3Btn" class="tool-btn" title="Header 3">H3</button>
                         </div>
                         
                         <div class="toolbar-group">
@@ -125,11 +136,38 @@
                         </div>
                         
                         <div class="toolbar-group">
+                            <button id="quoteBtn" class="tool-btn" title="Quote Block">
+                                <i class="fas fa-quote-left"></i>
+                            </button>
+                            <button id="codeBtn" class="tool-btn" title="Code Block">
+                                <i class="fas fa-code"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="toolbar-group">
+                            <button id="linkBtn" class="tool-btn" title="Insert Link">
+                                <i class="fas fa-link"></i>
+                            </button>
+                            <button id="trashBtn" class="tool-btn" title="Clear All Text">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="toolbar-group">
                             <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
                                 <i class="fas fa-undo"></i>
                             </button>
                             <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
                                 <i class="fas fa-redo"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="toolbar-group">
+                            <button id="fullscreenBtn" class="tool-btn" title="Fullscreen Editor">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                            <button id="previewBtn" class="tool-btn" title="Preview Markdown">
+                                <i class="fas fa-eye"></i>
                             </button>
                         </div>
                     </div>
@@ -154,24 +192,31 @@
             </div>
             <div class="fullscreen-toolbar">
                 <div class="toolbar-group">
+                    <div class="header-dropdown">
+                        <button class="tool-btn header-btn" title="Headers">
+                            <i class="fas fa-heading"></i>
+                        </button>
+                        <div class="header-menu">
+                            <button class="header-option" data-level="1">Header 1</button>
+                            <button class="header-option" data-level="2">Header 2</button>
+                            <button class="header-option" data-level="3">Header 3</button>
+                            <button class="header-option" data-level="4">Header 4</button>
+                            <button class="header-option" data-level="5">Header 5</button>
+                            <button class="header-option" data-level="6">Header 6</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="toolbar-group">
                     <button id="fsBoldBtn" class="tool-btn" title="Bold (Ctrl+B)">
                         <i class="fas fa-bold"></i>
                     </button>
                     <button id="fsItalicBtn" class="tool-btn" title="Italic (Ctrl+I)">
                         <i class="fas fa-italic"></i>
                     </button>
-                    <button id="fsCodeBtn" class="tool-btn" title="Code Block">
-                        <i class="fas fa-code"></i>
+                    <button id="fsStrikethroughBtn" class="tool-btn" title="Strikethrough (Ctrl+S)">
+                        <i class="fas fa-strikethrough"></i>
                     </button>
-                    <button id="fsQuoteBtn" class="tool-btn" title="Quote Block">
-                        <i class="fas fa-quote-left"></i>
-                    </button>
-                </div>
-                
-                <div class="toolbar-group">
-                    <button id="fsH1Btn" class="tool-btn" title="Header 1">H1</button>
-                    <button id="fsH2Btn" class="tool-btn" title="Header 2">H2</button>
-                    <button id="fsH3Btn" class="tool-btn" title="Header 3">H3</button>
                 </div>
                 
                 <div class="toolbar-group">
@@ -184,11 +229,38 @@
                 </div>
                 
                 <div class="toolbar-group">
+                    <button id="fsQuoteBtn" class="tool-btn" title="Quote Block">
+                        <i class="fas fa-quote-left"></i>
+                    </button>
+                    <button id="fsCodeBtn" class="tool-btn" title="Code Block">
+                        <i class="fas fa-code"></i>
+                    </button>
+                </div>
+                
+                <div class="toolbar-group">
+                    <button id="fsLinkBtn" class="tool-btn" title="Insert Link">
+                        <i class="fas fa-link"></i>
+                    </button>
+                    <button id="fsTrashBtn" class="tool-btn" title="Clear All Text">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                
+                <div class="toolbar-group">
                     <button id="fsUndoBtn" class="tool-btn" title="Undo (Ctrl+Z)">
                         <i class="fas fa-undo"></i>
                     </button>
                     <button id="fsRedoBtn" class="tool-btn" title="Redo (Ctrl+Y)">
                         <i class="fas fa-redo"></i>
+                    </button>
+                </div>
+                
+                <div class="toolbar-group">
+                    <button id="fsFullscreenBtn" class="tool-btn" title="Exit Fullscreen">
+                        <i class="fas fa-compress"></i>
+                    </button>
+                    <button id="fsPreviewBtn" class="tool-btn" title="Preview Markdown">
+                        <i class="fas fa-eye"></i>
                     </button>
                 </div>
             </div>
@@ -207,6 +279,6 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2.3"></script>
 </body>
 </html> 

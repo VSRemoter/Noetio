@@ -23,6 +23,7 @@ class YouTubeNoteTaker {
         this.initializeElements();
         this.bindEvents();
         this.loadNotes();
+        this.loadSharedNotes(); // Check for shared links
     }
 
     initializeElements() {
@@ -50,40 +51,45 @@ class YouTubeNoteTaker {
         this.toolbarButtons = {
             bold: document.getElementById('boldBtn'),
             italic: document.getElementById('italicBtn'),
-            code: document.getElementById('codeBtn'),
-            quote: document.getElementById('quoteBtn'),
-            h1: document.getElementById('h1Btn'),
-            h2: document.getElementById('h2Btn'),
-            h3: document.getElementById('h3Btn'),
+            strikethrough: document.getElementById('strikethroughBtn'),
             bulletList: document.getElementById('bulletListBtn'),
             numberList: document.getElementById('numberListBtn'),
+            quote: document.getElementById('quoteBtn'),
+            code: document.getElementById('codeBtn'),
+            link: document.getElementById('linkBtn'),
+            trash: document.getElementById('trashBtn'),
             undo: document.getElementById('undoBtn'),
-            redo: document.getElementById('redoBtn')
+            redo: document.getElementById('redoBtn'),
+            fullscreen: document.getElementById('fullscreenBtn'),
+            preview: document.getElementById('previewBtn')
         };
         
         // Fullscreen toolbar buttons
         this.fsToolbarButtons = {
             bold: document.getElementById('fsBoldBtn'),
             italic: document.getElementById('fsItalicBtn'),
-            code: document.getElementById('fsCodeBtn'),
-            quote: document.getElementById('fsQuoteBtn'),
-            h1: document.getElementById('fsH1Btn'),
-            h2: document.getElementById('fsH2Btn'),
-            h3: document.getElementById('fsH3Btn'),
+            strikethrough: document.getElementById('fsStrikethroughBtn'),
             bulletList: document.getElementById('fsBulletListBtn'),
             numberList: document.getElementById('fsNumberListBtn'),
+            quote: document.getElementById('fsQuoteBtn'),
+            code: document.getElementById('fsCodeBtn'),
+            link: document.getElementById('fsLinkBtn'),
+            trash: document.getElementById('fsTrashBtn'),
             undo: document.getElementById('fsUndoBtn'),
-            redo: document.getElementById('fsRedoBtn')
+            redo: document.getElementById('fsRedoBtn'),
+            fullscreen: document.getElementById('fsFullscreenBtn'),
+            preview: document.getElementById('fsPreviewBtn')
         };
 
         this.descriptionBtn = document.getElementById('descriptionBtn');
         this.transcriptBtn = document.getElementById('transcriptBtn');
         this.videoExtraInfo = document.getElementById('videoExtraInfo');
-        this.previewBtn = document.getElementById('previewBtn');
-        this.previewModal = document.getElementById('previewModal');
         this.closePreviewBtn = document.getElementById('closePreviewBtn');
         this.markdownPreview = document.getElementById('markdownPreview');
         this.noteTitleInput = document.getElementById('noteTitleInput');
+        this.manualTimestamp = document.getElementById('manualTimestamp');
+        this.syncTimestampBtn = document.getElementById('syncTimestampBtn');
+        this.shareBtn = document.getElementById('shareBtn');
     }
 
     bindEvents() {
@@ -114,13 +120,55 @@ class YouTubeNoteTaker {
         this.bindDownloadEvents();
 
         // Bind toolbar buttons
-        this.bindToolbarEvents();
-        this.bindFullscreenToolbarEvents();
+        // this.bindToolbarEvents();
+        // this.bindFullscreenToolbarEvents();
 
         if (this.descriptionBtn) this.descriptionBtn.addEventListener('click', () => this.toggleDescription());
         if (this.transcriptBtn) this.transcriptBtn.addEventListener('click', () => this.toggleTranscript());
-        if (this.previewBtn) this.previewBtn.addEventListener('click', () => this.showPreview());
         if (this.closePreviewBtn) this.closePreviewBtn.addEventListener('click', () => this.hidePreview());
+        if (this.syncTimestampBtn) this.syncTimestampBtn.addEventListener('click', () => this.syncTimestamp());
+        if (this.shareBtn) this.shareBtn.addEventListener('click', () => this.generateShareLink());
+        
+        // Bind header dropdown events
+        this.bindHeaderDropdownEvents();
+
+        // Toolbar event listeners
+        this.toolbarButtons.bold.addEventListener('click', () => this.applyFormat('bold'));
+        this.toolbarButtons.italic.addEventListener('click', () => this.applyFormat('italic'));
+        this.toolbarButtons.strikethrough.addEventListener('click', () => this.applyFormat('strikethrough'));
+        this.toolbarButtons.bulletList.addEventListener('click', () => this.applyFormat('bulletList'));
+        this.toolbarButtons.numberList.addEventListener('click', () => this.applyFormat('numberList'));
+        this.toolbarButtons.quote.addEventListener('click', () => this.applyFormat('quote'));
+        this.toolbarButtons.code.addEventListener('click', () => this.applyFormat('code'));
+        this.toolbarButtons.link.addEventListener('click', () => this.applyFormat('link'));
+        this.toolbarButtons.trash.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all text in this note? This action cannot be undone.')) {
+                this.clearEditorContentOnly();
+            }
+        });
+        this.toolbarButtons.undo.addEventListener('click', () => this.undo());
+        this.toolbarButtons.redo.addEventListener('click', () => this.redo());
+        this.toolbarButtons.fullscreen.addEventListener('click', () => this.enterFullscreen());
+        this.toolbarButtons.preview.addEventListener('click', () => this.togglePreview());
+
+        // Fullscreen toolbar event listeners
+        this.fsToolbarButtons.bold.addEventListener('click', () => this.applyFullscreenFormat('bold'));
+        this.fsToolbarButtons.italic.addEventListener('click', () => this.applyFullscreenFormat('italic'));
+        this.fsToolbarButtons.strikethrough.addEventListener('click', () => this.applyFullscreenFormat('strikethrough'));
+        this.fsToolbarButtons.bulletList.addEventListener('click', () => this.applyFullscreenFormat('bulletList'));
+        this.fsToolbarButtons.numberList.addEventListener('click', () => this.applyFullscreenFormat('numberList'));
+        this.fsToolbarButtons.quote.addEventListener('click', () => this.applyFullscreenFormat('quote'));
+        this.fsToolbarButtons.code.addEventListener('click', () => this.applyFullscreenFormat('code'));
+        this.fsToolbarButtons.link.addEventListener('click', () => this.applyFullscreenFormat('link'));
+        this.fsToolbarButtons.trash.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all text in this note? This action cannot be undone.')) {
+                this.clearEditorContentOnly();
+            }
+        });
+        this.fsToolbarButtons.undo.addEventListener('click', () => this.fsUndo());
+        this.fsToolbarButtons.redo.addEventListener('click', () => this.fsRedo());
+        this.fsToolbarButtons.fullscreen.addEventListener('click', () => this.exitFullscreen());
+        this.fsToolbarButtons.preview.addEventListener('click', () => this.togglePreview());
     }
 
     bindDownloadEvents() {
@@ -184,11 +232,13 @@ class YouTubeNoteTaker {
             const noteTitle = note.title || note.videoTitle || 'Untitled Note';
             const createdDate = new Date(note.createdAt).toLocaleDateString();
             const updatedDate = new Date(note.updatedAt).toLocaleDateString();
+            const timestamp = note.videoTimestamp ? `**Video Timestamp:** ${note.videoTimestamp}\n\n` : '';
             
             markdown += `## ${index + 1}. ${noteTitle}\n\n`;
             markdown += `**Video:** [${note.videoTitle}](${note.videoUrl || 'N/A'})\n\n`;
             markdown += `**Created:** ${createdDate}\n`;
             markdown += `**Updated:** ${updatedDate}\n\n`;
+            markdown += timestamp;
             markdown += `**Content:**\n\n`;
             markdown += note.content + '\n\n';
             markdown += `---\n\n`;
@@ -200,7 +250,7 @@ class YouTubeNoteTaker {
 
     downloadAllNotesCSV(filename) {
         const csvData = [
-            ['Note Number', 'Title', 'Video Title', 'Video URL', 'Created Date', 'Updated Date', 'Content']
+            ['Note Number', 'Title', 'Video Title', 'Video URL', 'Video Timestamp', 'Created Date', 'Updated Date', 'Content']
         ];
         
         this.notes.forEach((note, index) => {
@@ -208,12 +258,14 @@ class YouTubeNoteTaker {
             const createdDate = new Date(note.createdAt).toLocaleDateString();
             const updatedDate = new Date(note.updatedAt).toLocaleDateString();
             const content = note.content.replace(/\n/g, ' ').replace(/"/g, '""');
+            const timestamp = note.videoTimestamp || '';
             
             csvData.push([
                 index + 1,
                 noteTitle,
                 note.videoTitle,
                 note.videoUrl || '',
+                timestamp,
                 createdDate,
                 updatedDate,
                 content
@@ -246,12 +298,12 @@ class YouTubeNoteTaker {
         const url = this.youtubeLinkInput.value.trim();
         if (!url) {
             this.showMessage('Please enter a YouTube URL', 'error');
-            return;
+            return Promise.reject('No URL provided');
         }
         const videoId = this.extractYouTubeVideoId(url);
         if (!videoId) {
             this.showMessage('Invalid YouTube URL', 'error');
-            return;
+            return Promise.reject('Invalid URL');
         }
         this.currentVideoId = videoId;
         // Use YouTube iframe API for seeking
@@ -263,20 +315,27 @@ class YouTubeNoteTaker {
         this.videoExtraInfo.style.display = 'none';
         this.videoExtraInfo.innerHTML = '';
         this.showMessage('Video loaded successfully!', 'success');
+        
         // Load YouTube Iframe API if not already loaded
         if (!window.YT) {
             const tag = document.createElement('script');
             tag.src = "https://www.youtube.com/iframe_api";
             document.body.appendChild(tag);
         }
-        // Wait for API to be ready
-        window.onYouTubeIframeAPIReady = () => {
-            this.createPlayer(videoId);
-        };
-        // If API is already loaded
-        if (window.YT && window.YT.Player) {
-            this.createPlayer(videoId);
-        }
+        
+        // Return a promise that resolves when the player is ready
+        return new Promise((resolve) => {
+            // Wait for API to be ready
+            window.onYouTubeIframeAPIReady = () => {
+                this.createPlayer(videoId);
+                resolve();
+            };
+            // If API is already loaded
+            if (window.YT && window.YT.Player) {
+                this.createPlayer(videoId);
+                resolve();
+            }
+        });
     }
 
     createPlayer(videoId) {
@@ -443,11 +502,15 @@ class YouTubeNoteTaker {
 
         switch (type) {
             case 'bold':
-                formattedText = `****${selectedText}****`;
-                newCursorPos = start + 4;
+                formattedText = `**${selectedText}**`;
+                newCursorPos = start + 2;
                 break;
             case 'italic':
-                formattedText = `**${selectedText}**`;
+                formattedText = `*${selectedText}*`;
+                newCursorPos = start + 1;
+                break;
+            case 'strikethrough':
+                formattedText = `~~${selectedText}~~`;
                 newCursorPos = start + 2;
                 break;
             case 'code':
@@ -470,13 +533,45 @@ class YouTubeNoteTaker {
                 formattedText = `### ${selectedText}`;
                 newCursorPos = start + 4;
                 break;
+            case 'h4':
+                formattedText = `#### ${selectedText}`;
+                newCursorPos = start + 5;
+                break;
+            case 'h5':
+                formattedText = `##### ${selectedText}`;
+                newCursorPos = start + 6;
+                break;
+            case 'h6':
+                formattedText = `###### ${selectedText}`;
+                newCursorPos = start + 7;
+                break;
             case 'bulletList':
-                formattedText = `- ${selectedText}`;
-                newCursorPos = start + 2;
+                console.log('Bullet list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
+                if (selectedText === '') {
+                    formattedText = `* `;
+                    newCursorPos = start + 2;
+                    console.log('Empty selection - adding:', `"${formattedText}"`);
+                } else {
+                    formattedText = `* ${selectedText}`;
+                    newCursorPos = start + 2;
+                    console.log('Text selected - adding:', `"${formattedText}"`);
+                }
                 break;
             case 'numberList':
-                formattedText = `1. ${selectedText}`;
-                newCursorPos = start + 3;
+                console.log('Number list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
+                if (selectedText === '') {
+                    formattedText = `1. `;
+                    newCursorPos = start + 3;
+                    console.log('Empty selection - adding:', `"${formattedText}"`);
+                } else {
+                    formattedText = `1. ${selectedText}`;
+                    newCursorPos = start + 3;
+                    console.log('Text selected - adding:', `"${formattedText}"`);
+                }
+                break;
+            case 'link':
+                formattedText = `[${selectedText}](${selectedText})`;
+                newCursorPos = start + selectedText.length + 3;
                 break;
         }
 
@@ -501,11 +596,15 @@ class YouTubeNoteTaker {
 
         switch (type) {
             case 'bold':
-                formattedText = `****${selectedText}****`;
-                newCursorPos = start + 4;
+                formattedText = `**${selectedText}**`;
+                newCursorPos = start + 2;
                 break;
             case 'italic':
-                formattedText = `**${selectedText}**`;
+                formattedText = `*${selectedText}*`;
+                newCursorPos = start + 1;
+                break;
+            case 'strikethrough':
+                formattedText = `~~${selectedText}~~`;
                 newCursorPos = start + 2;
                 break;
             case 'code':
@@ -528,13 +627,45 @@ class YouTubeNoteTaker {
                 formattedText = `### ${selectedText}`;
                 newCursorPos = start + 4;
                 break;
+            case 'h4':
+                formattedText = `#### ${selectedText}`;
+                newCursorPos = start + 5;
+                break;
+            case 'h5':
+                formattedText = `##### ${selectedText}`;
+                newCursorPos = start + 6;
+                break;
+            case 'h6':
+                formattedText = `###### ${selectedText}`;
+                newCursorPos = start + 7;
+                break;
             case 'bulletList':
-                formattedText = `- ${selectedText}`;
-                newCursorPos = start + 2;
+                console.log('Bullet list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
+                if (selectedText === '') {
+                    formattedText = `* `;
+                    newCursorPos = start + 2;
+                    console.log('Empty selection - adding:', `"${formattedText}"`);
+                } else {
+                    formattedText = `* ${selectedText}`;
+                    newCursorPos = start + 2;
+                    console.log('Text selected - adding:', `"${formattedText}"`);
+                }
                 break;
             case 'numberList':
-                formattedText = `1. ${selectedText}`;
-                newCursorPos = start + 3;
+                console.log('Number list - selectedText:', `"${selectedText}"`, 'length:', selectedText.length);
+                if (selectedText === '') {
+                    formattedText = `1. `;
+                    newCursorPos = start + 3;
+                    console.log('Empty selection - adding:', `"${formattedText}"`);
+                } else {
+                    formattedText = `1. ${selectedText}`;
+                    newCursorPos = start + 3;
+                    console.log('Text selected - adding:', `"${formattedText}"`);
+                }
+                break;
+            case 'link':
+                formattedText = `[${selectedText}](${selectedText})`;
+                newCursorPos = start + selectedText.length + 3;
                 break;
         }
 
@@ -621,6 +752,14 @@ class YouTubeNoteTaker {
                             this.applyFullscreenFormat('italic');
                         }
                         break;
+                    case 's':
+                        e.preventDefault();
+                        if (document.activeElement === this.noteEditor) {
+                            this.applyFormat('strikethrough');
+                        } else {
+                            this.applyFullscreenFormat('strikethrough');
+                        }
+                        break;
                     case 'z':
                         e.preventDefault();
                         if (document.activeElement === this.noteEditor) {
@@ -637,6 +776,72 @@ class YouTubeNoteTaker {
                             this.fsRedo();
                         }
                         break;
+                }
+            }
+            
+            // Handle Enter key for smart list continuation
+            if (e.key === 'Enter') {
+                const textarea = document.activeElement;
+                const cursorPos = textarea.selectionStart;
+                const lineStart = this.getLineStart(textarea, cursorPos);
+                const lineText = textarea.value.substring(lineStart, cursorPos);
+                
+                // Check for bullet list continuation
+                if (lineText.match(/^\* $/)) {
+                    e.preventDefault();
+                    this.insertAtCursor(textarea, '\n* ');
+                }
+                // Check for numbered list continuation
+                else if (lineText.match(/^\d+\. $/)) {
+                    e.preventDefault();
+                    const currentNumber = parseInt(lineText.match(/^(\d+)\./)[1]);
+                    this.insertAtCursor(textarea, `\n${currentNumber + 1}. `);
+                }
+                // Check for bullet list with content
+                else if (lineText.match(/^\* .+/)) {
+                    e.preventDefault();
+                    this.insertAtCursor(textarea, '\n* ');
+                }
+                // Check for numbered list with content
+                else if (lineText.match(/^\d+\. .+/)) {
+                    e.preventDefault();
+                    const currentNumber = parseInt(lineText.match(/^(\d+)\./)[1]);
+                    this.insertAtCursor(textarea, `\n${currentNumber + 1}. `);
+                }
+                // Check for empty bullet list item (end list)
+                else if (lineText.match(/^\*$/)) {
+                    e.preventDefault();
+                    this.insertAtCursor(textarea, '\n');
+                }
+                // Check for empty numbered list item (end list)
+                else if (lineText.match(/^\d+\.$/)) {
+                    e.preventDefault();
+                    this.insertAtCursor(textarea, '\n');
+                }
+            }
+            
+            // Handle Backspace key to end lists
+            if (e.key === 'Backspace') {
+                const textarea = document.activeElement;
+                const cursorPos = textarea.selectionStart;
+                const lineStart = this.getLineStart(textarea, cursorPos);
+                const lineText = textarea.value.substring(lineStart, cursorPos);
+                
+                // If we're at the beginning of a list item, end the list
+                if (lineText.match(/^\* $/) || lineText.match(/^\d+\. $/)) {
+                    e.preventDefault();
+                    // Remove the list marker and space
+                    const beforeText = textarea.value.substring(0, lineStart);
+                    const afterText = textarea.value.substring(cursorPos);
+                    textarea.value = beforeText + afterText;
+                    textarea.setSelectionRange(lineStart, lineStart);
+                    textarea.focus();
+                    
+                    if (textarea === this.noteEditor) {
+                        this.handleEditorChange();
+                    } else if (textarea === this.fullscreenEditor) {
+                        this.handleFullscreenEditorChange();
+                    }
                 }
             }
         }
@@ -672,6 +877,28 @@ class YouTubeNoteTaker {
             this.showMessage('Please enter a YouTube URL, note title, or note content', 'error');
             return;
         }
+        
+        // Get current video timestamp if video is playing
+        let videoTimestamp = null;
+        
+        // Check if manual timestamp is provided
+        const manualTimestamp = this.manualTimestamp.value.trim();
+        if (manualTimestamp) {
+            // Validate manual timestamp format
+            if (this.isValidTimestamp(manualTimestamp)) {
+                videoTimestamp = manualTimestamp;
+            } else {
+                this.showMessage('Invalid timestamp format. Use MM:SS or HH:MM:SS', 'error');
+                return;
+            }
+        } else if (this.player && typeof this.player.getCurrentTime === 'function') {
+            // Use current video time if no manual timestamp
+            const currentTime = this.player.getCurrentTime();
+            if (currentTime && currentTime > 0) {
+                videoTimestamp = this.formatTime(currentTime);
+            }
+        }
+        
         const note = {
             id: this.currentNoteId || Date.now().toString(),
             videoUrl: videoUrl,
@@ -679,9 +906,11 @@ class YouTubeNoteTaker {
             videoChannel: this.videoChannel.textContent || 'Unknown Channel',
             content: noteContent,
             title: noteTitle,
+            videoTimestamp: videoTimestamp, // Add video timestamp
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
+        
         // Update existing note or add new one
         const existingIndex = this.notes.findIndex(n => n.id === note.id);
         if (existingIndex !== -1) {
@@ -691,8 +920,29 @@ class YouTubeNoteTaker {
         }
         this.saveToLocalStorage();
         this.loadNotes();
-        this.clearEditor();
-        this.showMessage('Note saved successfully!', 'success');
+        
+        // Clear only the editor content, keep video visible
+        this.clearEditorContentOnly();
+        
+        // Show success message with timestamp if available
+        let successMessage = 'Note saved successfully!';
+        if (videoTimestamp) {
+            successMessage += ` (Timestamp: ${videoTimestamp})`;
+        }
+        this.showMessage(successMessage, 'success');
+    }
+
+    clearEditorContentOnly() {
+        // Clear only the editor content, not the video
+        this.currentNoteId = null;
+        this.noteEditor.value = '';
+        this.noteTitleInput.value = '';
+        this.manualTimestamp.value = '';
+        this.undoStack = [];
+        this.redoStack = [];
+        document.querySelectorAll('.note-item').forEach(item => {
+            item.classList.remove('active');
+        });
     }
 
     loadNotes() {
@@ -701,9 +951,33 @@ class YouTubeNoteTaker {
             this.notesList.innerHTML = '<p style="text-align: center; color: #6c757d; font-style: italic;">No saved notes yet</p>';
             return;
         }
-        this.notes.forEach(note => {
+        
+        // Sort notes by timestamp
+        const sortedNotes = this.sortNotesByTimestamp(this.notes);
+        
+        sortedNotes.forEach(note => {
             const noteElement = this.createNoteElement(note);
             this.notesList.appendChild(noteElement);
+        });
+    }
+
+    sortNotesByTimestamp(notes) {
+        return notes.sort((a, b) => {
+            // If both notes have timestamps, compare them
+            if (a.videoTimestamp && b.videoTimestamp) {
+                const timeA = this.parseTimestampToSeconds(a.videoTimestamp);
+                const timeB = this.parseTimestampToSeconds(b.videoTimestamp);
+                if (timeA !== null && timeB !== null) {
+                    return timeA - timeB; // Sort ascending (lowest time first)
+                }
+            }
+            
+            // If only one has timestamp, put the one with timestamp first
+            if (a.videoTimestamp && !b.videoTimestamp) return -1;
+            if (!a.videoTimestamp && b.videoTimestamp) return 1;
+            
+            // If neither has timestamp, sort by creation date (newest first)
+            return new Date(b.createdAt) - new Date(a.createdAt);
         });
     }
 
@@ -713,35 +987,92 @@ class YouTubeNoteTaker {
         noteDiv.dataset.noteId = note.id;
         const title = note.title ? note.title : (note.videoTitle !== 'Untitled Video' ? note.videoTitle : 'Untitled Note');
         const preview = note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '');
-        const date = new Date(note.updatedAt).toLocaleDateString();
+        
+        // Only show timestamp if available
+        const timestampDisplay = note.videoTimestamp ? 
+            `<div class="note-timestamp">${note.videoTimestamp}</div>` : '';
+        
         noteDiv.innerHTML = `
-            <div class="note-title">${title}</div>
-            <div class="note-preview">${preview}</div>
-            <div class="note-date">${date}</div>
+            <div class="note-content">
+                <div class="note-title">${title}</div>
+                <div class="note-preview">${preview}</div>
+                ${timestampDisplay}
+            </div>
+            <button class="note-delete-btn" title="Delete note">×</button>
         `;
-        noteDiv.addEventListener('click', () => this.loadNote(note));
+        
+        // Add click event for loading note
+        noteDiv.querySelector('.note-content').addEventListener('click', () => this.loadNote(note));
+        
+        // Add click event for delete button
+        noteDiv.querySelector('.note-delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.deleteNote(note.id);
+        });
+        
         return noteDiv;
     }
 
     loadNote(note) {
         this.currentNoteId = note.id;
-        this.youtubeLinkInput.value = note.videoUrl || '';
         this.noteEditor.value = note.content || '';
         this.noteTitleInput.value = note.title || '';
-        // Load video if URL exists
+        
+        // Update video URL without reloading if it's the same video
+        const currentVideoId = this.extractYouTubeVideoId(this.youtubeLinkInput.value);
+        const newVideoId = this.extractYouTubeVideoId(note.videoUrl || '');
+        
         if (note.videoUrl) {
-            this.loadYouTubeVideo();
+            this.youtubeLinkInput.value = note.videoUrl;
+            
+            if (currentVideoId === newVideoId && this.player) {
+                // Same video, just seek to timestamp
+                if (note.videoTimestamp) {
+                    const timestampSeconds = this.parseTimestampToSeconds(note.videoTimestamp);
+                    if (timestampSeconds !== null) {
+                        this.player.seekTo(timestampSeconds, true);
+                    }
+                }
+            } else {
+                // Different video, load new video
+                this.loadYouTubeVideo().then(() => {
+                    // Seek to timestamp if available
+                    if (note.videoTimestamp && this.player && typeof this.player.seekTo === 'function') {
+                        const timestampSeconds = this.parseTimestampToSeconds(note.videoTimestamp);
+                        if (timestampSeconds !== null) {
+                            setTimeout(() => {
+                                this.player.seekTo(timestampSeconds, true);
+                            }, 1000);
+                        }
+                    }
+                });
+            }
         } else {
             this.videoPreview.style.display = 'none';
         }
+        
         // Update active state in sidebar
         document.querySelectorAll('.note-item').forEach(item => {
             item.classList.remove('active');
         });
         document.querySelector(`[data-note-id="${note.id}"]`).classList.add('active');
+        
         // Clear undo/redo stacks
         this.undoStack = [];
         this.redoStack = [];
+    }
+
+    parseTimestampToSeconds(timestamp) {
+        // Convert timestamp like "3:29" or "1:23:45" to seconds
+        const parts = timestamp.split(':').map(Number);
+        if (parts.length === 2) {
+            // MM:SS format
+            return parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+            // HH:MM:SS format
+            return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+        return null;
     }
 
     clearEditor() {
@@ -806,11 +1137,6 @@ class YouTubeNoteTaker {
         // Quote
         this.toolbarButtons.quote.addEventListener('click', () => this.applyFormat('quote'));
         
-        // Headers
-        this.toolbarButtons.h1.addEventListener('click', () => this.applyFormat('h1'));
-        this.toolbarButtons.h2.addEventListener('click', () => this.applyFormat('h2'));
-        this.toolbarButtons.h3.addEventListener('click', () => this.applyFormat('h3'));
-        
         // Lists
         this.toolbarButtons.bulletList.addEventListener('click', () => this.applyFormat('bulletList'));
         this.toolbarButtons.numberList.addEventListener('click', () => this.applyFormat('numberList'));
@@ -818,6 +1144,9 @@ class YouTubeNoteTaker {
         // Undo/Redo
         this.toolbarButtons.undo.addEventListener('click', () => this.undo());
         this.toolbarButtons.redo.addEventListener('click', () => this.redo());
+        
+        // Fullscreen
+        this.toolbarButtons.fullscreen.addEventListener('click', () => this.enterFullscreen());
     }
 
     bindFullscreenToolbarEvents() {
@@ -833,11 +1162,6 @@ class YouTubeNoteTaker {
         // Quote
         this.fsToolbarButtons.quote.addEventListener('click', () => this.applyFullscreenFormat('quote'));
         
-        // Headers
-        this.fsToolbarButtons.h1.addEventListener('click', () => this.applyFullscreenFormat('h1'));
-        this.fsToolbarButtons.h2.addEventListener('click', () => this.applyFullscreenFormat('h2'));
-        this.fsToolbarButtons.h3.addEventListener('click', () => this.applyFullscreenFormat('h3'));
-        
         // Lists
         this.fsToolbarButtons.bulletList.addEventListener('click', () => this.applyFullscreenFormat('bulletList'));
         this.fsToolbarButtons.numberList.addEventListener('click', () => this.applyFullscreenFormat('numberList'));
@@ -845,25 +1169,331 @@ class YouTubeNoteTaker {
         // Undo/Redo
         this.fsToolbarButtons.undo.addEventListener('click', () => this.fsUndo());
         this.fsToolbarButtons.redo.addEventListener('click', () => this.fsRedo());
+        
+        // Fullscreen
+        this.fsToolbarButtons.fullscreen.addEventListener('click', () => this.exitFullscreen());
     }
 
     convertMarkdownToHTML(markdown) {
-        // Simple markdown to HTML conversion
-        return markdown
-            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-            .replace(/\*\*\*(.*?)\*\*\*/g, '<strong>$1</strong>')
-            .replace(/\*\*(.*?)\*\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
-            .replace(/^- (.*$)/gim, '<li>$1</li>')
-            .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/^(.+)$/gm, '<p>$1</p>')
-            .replace(/<p><\/p>/g, '')
-            .replace(/<p><h/g, '<h')
-            .replace(/<\/h\d><\/p>/g, '</h$1>');
+        if (!markdown || markdown.trim() === '') {
+            return '<p></p>';
+        }
+
+        let html = markdown;
+        
+        // Process code blocks first (before other formatting)
+        html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+        
+        // Process inline code
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Process headers (must be at start of line)
+        html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+        html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
+        html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+        html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+        html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+        html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+        
+        // Process blockquotes (must be at start of line)
+        html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+        
+        // Process lists (must be at start of line)
+        // Handle numbered lists first - preserve the actual numbers
+        html = html.replace(/^(\d+)\. (.*$)/gim, '<li class="numbered" style="list-style-type: none;"><span style="font-weight: bold; margin-right: 8px;">$1.</span>$2</li>');
+        // Handle bullet lists
+        html = html.replace(/^\* (.*$)/gim, '<li class="bullet">$1</li>');
+        
+        // Process links (avoid processing inside code blocks)
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+        
+        // Process bold and italic (order matters - bold first)
+        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        
+        // Process strikethrough
+        html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
+        
+        // Group consecutive list items into proper lists
+        html = html.replace(/(<li class="numbered" style="list-style-type: none;"><span style="font-weight: bold; margin-right: 8px;">.*?<\/span><\/li>)+/gs, function(match) {
+            return '<ol>' + match + '</ol>';
+        });
+        
+        html = html.replace(/(<li class="bullet">.*?<\/li>)+/gs, function(match) {
+            return '<ul>' + match + '</ul>';
+        });
+        
+        // Remove the class and data attributes from list items
+        html = html.replace(/class="numbered" style="list-style-type: none;"/g, '');
+        html = html.replace(/class="bullet"/g, '');
+        
+        // Handle line breaks and paragraphs
+        // Split by double line breaks to create paragraphs
+        const lines = html.split(/\n\n+/);
+        const processedLines = lines.map(line => {
+            line = line.trim();
+            if (line === '') return '';
+            
+            // If line already starts with a block element, don't wrap in p
+            if (line.match(/^<(h[1-6]|blockquote|pre|ul|ol|li)/i)) {
+                return line;
+            }
+            
+            // Replace single line breaks with <br> within paragraphs
+            line = line.replace(/\n/g, '<br>');
+            return '<p>' + line + '</p>';
+        });
+        
+        html = processedLines.filter(line => line !== '').join('\n');
+        
+        // Clean up any empty paragraphs
+        html = html.replace(/<p><\/p>/g, '');
+        
+        return html;
+    }
+
+    deleteNote(noteId) {
+        if (confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
+            this.notes = this.notes.filter(note => note.id !== noteId);
+            this.saveToLocalStorage();
+            this.loadNotes();
+            this.showMessage('Note deleted successfully!', 'success');
+        }
+    }
+
+    // Bind header dropdown events
+    bindHeaderDropdownEvents() {
+        const headerOptions = document.querySelectorAll('.header-option');
+        headerOptions.forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.preventDefault();
+                const level = option.getAttribute('data-level');
+                this.applyFormat(`h${level}`);
+            });
+        });
+    }
+
+    // Implementation of syncTimestamp method
+    syncTimestamp() {
+        if (this.player && typeof this.player.getCurrentTime === 'function') {
+            const currentTime = this.player.getCurrentTime();
+            if (currentTime && currentTime >= 0) {
+                const formattedTime = this.formatTime(currentTime);
+                this.manualTimestamp.value = formattedTime;
+                this.showMessage(`Timestamp synced: ${formattedTime}`, 'success');
+            } else {
+                this.showMessage('Video not playing or time not available', 'error');
+            }
+        } else {
+            this.showMessage('Video player not available', 'error');
+        }
+    }
+
+    isValidTimestamp(timestamp) {
+        // Accept formats: MM:SS, HH:MM:SS
+        const timeRegex = /^(\d{1,2}:)?\d{1,2}:\d{2}$/;
+        return timeRegex.test(timestamp);
+    }
+
+    getLineStart(textarea, cursorPos) {
+        const text = textarea.value;
+        let lineStart = cursorPos;
+        while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+            lineStart--;
+        }
+        return lineStart;
+    }
+
+    insertAtCursor(textarea, textToInsert) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const beforeText = textarea.value.substring(0, start);
+        const afterText = textarea.value.substring(end);
+        
+        textarea.value = beforeText + textToInsert + afterText;
+        textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+        textarea.focus();
+        
+        // Trigger change event
+        if (textarea === this.noteEditor) {
+            this.handleEditorChange();
+        } else if (textarea === this.fullscreenEditor) {
+            this.handleFullscreenEditorChange();
+        }
+    }
+
+    togglePreview() {
+        const textarea = document.activeElement === this.fullscreenEditor ? this.fullscreenEditor : this.noteEditor;
+        const isInPreviewMode = textarea.style.display === 'none';
+        
+        if (isInPreviewMode) {
+            // Switch back to editor mode
+            textarea.style.display = '';
+            textarea.style.backgroundColor = '';
+            textarea.style.color = '';
+            textarea.style.fontFamily = '';
+            textarea.style.lineHeight = '';
+            textarea.style.padding = '';
+            textarea.style.border = '';
+            
+            // Find and remove the preview div by looking for it next to the textarea
+            const nextElement = textarea.nextSibling;
+            if (nextElement && nextElement.tagName === 'DIV' && nextElement.style.backgroundColor === 'rgb(248, 249, 250)') {
+                nextElement.remove();
+            }
+            
+            // Restore original markdown content
+            const originalContent = textarea.getAttribute('data-original-content');
+            if (originalContent) {
+                textarea.value = originalContent;
+                textarea.removeAttribute('data-original-content');
+            }
+            
+            // Update button icon
+            const previewBtn = document.activeElement === this.fullscreenEditor ? 
+                this.fsToolbarButtons.preview : this.toolbarButtons.preview;
+            previewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            previewBtn.title = 'Preview Markdown';
+            
+        } else {
+            // Switch to preview mode
+            const markdownContent = textarea.value;
+            const htmlContent = this.convertMarkdownToHTML(markdownContent);
+            
+            // Create a temporary div to hold the HTML content
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            tempDiv.style.cssText = `
+                width: 100%;
+                height: 100%;
+                min-height: 200px;
+                background-color: #f8f9fa;
+                color: #333;
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                padding: 15px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            `;
+            
+            // Store original content and replace textarea with div
+            textarea.setAttribute('data-original-content', markdownContent);
+            textarea.style.display = 'none';
+            textarea.parentNode.insertBefore(tempDiv, textarea.nextSibling);
+            
+            // Update button icon
+            const previewBtn = document.activeElement === this.fullscreenEditor ? 
+                this.fsToolbarButtons.preview : this.toolbarButtons.preview;
+            previewBtn.innerHTML = '<i class="fas fa-edit"></i>';
+            previewBtn.title = 'Edit Markdown';
+        }
+    }
+
+    generateShareLink() {
+        if (this.notes.length === 0) {
+            this.showMessage('No saved notes to share', 'error');
+            return;
+        }
+
+        // Generate a unique ID for this share
+        const shareId = this.generateUniqueId();
+        
+        // Create share data (no expiration)
+        const shareData = {
+            id: shareId,
+            notes: this.notes,
+            createdAt: new Date().toISOString()
+        };
+        
+        // Store in localStorage (in a real app, this would go to a database)
+        const shares = JSON.parse(localStorage.getItem('sharedNotes') || '{}');
+        shares[shareId] = shareData;
+        localStorage.setItem('sharedNotes', JSON.stringify(shares));
+        
+        // Generate the share URL
+        const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
+        
+        // Copy to clipboard
+        this.copyToClipboard(shareUrl);
+        
+        this.showMessage('Public Link Copied', 'success');
+    }
+
+    generateUniqueId() {
+        return 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    copyToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text);
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            textArea.remove();
+        }
+    }
+
+    loadSharedNotes() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareId = urlParams.get('share');
+        
+        if (shareId) {
+            const shares = JSON.parse(localStorage.getItem('sharedNotes') || '{}');
+            const shareData = shares[shareId];
+            
+            if (shareData) {
+                // Load the shared notes in view-only mode
+                this.loadSharedNotesView(shareData.notes);
+                this.showMessage('Shared notes loaded in view-only mode', 'success');
+            } else {
+                this.showMessage('Share link not found or invalid', 'error');
+            }
+        }
+    }
+
+    loadSharedNotesView(sharedNotes) {
+        // Disable editing functionality
+        this.noteEditor.readOnly = true;
+        this.fullscreenEditor.readOnly = true;
+        this.saveNoteBtn.disabled = true;
+        this.shareBtn.disabled = true;
+        this.clearAllBtn.disabled = true;
+        
+        // Hide editor controls
+        document.querySelector('.editor-controls').style.display = 'none';
+        document.querySelector('.toolbar').style.display = 'none';
+        
+        // Load the shared notes
+        this.notes = sharedNotes;
+        this.loadNotes();
+        
+        // Add a banner indicating this is a shared view
+        const banner = document.createElement('div');
+        banner.className = 'shared-banner';
+        banner.innerHTML = '<i class="fas fa-eye"></i> Viewing shared notes (read-only)';
+        banner.style.cssText = `
+            background-color: #17a2b8;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        `;
+        
+        const mainContent = document.querySelector('.main-content');
+        mainContent.insertBefore(banner, mainContent.firstChild);
     }
 }
 
