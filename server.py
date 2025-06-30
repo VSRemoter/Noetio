@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +27,7 @@ def get_transcript(video_id):
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    print("Starting YouTube Note Taker server on http://localhost:8080")
-    print("Transcript API available at http://localhost:8080/api/transcript/:videoId")
-    app.run(host='0.0.0.0', port=8080, debug=True) 
+    port = int(os.environ.get('PORT', 8080))
+    print(f"Starting YouTube Note Taker server on port {port}")
+    print(f"Transcript API available at http://localhost:{port}/api/transcript/:videoId")
+    app.run(host='0.0.0.0', port=port, debug=False) 
