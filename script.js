@@ -19,6 +19,11 @@ class YouTubeNoteTaker {
         this.currentVideoId = null;
         this.currentVideoDescription = '';
         this.currentVideoTranscript = '';
+        this.isTranscribing = false;
+        this.transcriptionInterval = null;
+        this.currentTranscriptIndex = 0;
+        this.transcriptEntries = [];
+        this.masterTitle = localStorage.getItem('masterTitle') || '';
         
         this.initializeElements();
         this.bindEvents();
@@ -90,6 +95,26 @@ class YouTubeNoteTaker {
         this.manualTimestamp = document.getElementById('manualTimestamp');
         this.syncTimestampBtn = document.getElementById('syncTimestampBtn');
         this.shareBtn = document.getElementById('shareBtn');
+        
+        // Transcript elements
+        this.transcriptSearchInput = document.getElementById('transcriptSearchInput');
+        this.transcriptSearchResults = document.getElementById('transcriptSearchResults');
+        this.transcriptCreateBtn = document.getElementById('transcriptCreateBtn');
+        this.transcriptDownloadBtn = document.getElementById('transcriptDownloadBtn');
+        this.transcriptContainer = document.getElementById('transcriptContainer');
+        
+        // Autotranscribe elements
+        this.autotranscribeBtn = document.getElementById('autotranscribeBtn');
+        this.fsAutotranscribeBtn = document.getElementById('fsAutotranscribeBtn');
+        
+        // Fullscreen Save Note button
+        this.fsSaveNoteBtn = document.getElementById('fsSaveNoteBtn');
+        
+        // Master title
+        this.masterTitleInput = document.getElementById('masterTitleInput');
+        
+        // Preview modal
+        this.previewModal = document.getElementById('previewModal');
     }
 
     bindEvents() {
@@ -101,6 +126,7 @@ class YouTubeNoteTaker {
 
         // Note saving
         this.saveNoteBtn.addEventListener('click', () => this.saveNote());
+        if (this.fsSaveNoteBtn) this.fsSaveNoteBtn.addEventListener('click', () => this.saveNote());
 
         // Fullscreen mode
         this.fullscreenBtn.addEventListener('click', () => this.enterFullscreen());
@@ -128,6 +154,24 @@ class YouTubeNoteTaker {
         if (this.closePreviewBtn) this.closePreviewBtn.addEventListener('click', () => this.hidePreview());
         if (this.syncTimestampBtn) this.syncTimestampBtn.addEventListener('click', () => this.syncTimestamp());
         if (this.shareBtn) this.shareBtn.addEventListener('click', () => this.generateShareLink());
+        
+        // Transcript features
+        if (this.transcriptSearchInput) this.transcriptSearchInput.addEventListener('input', () => this.searchTranscript());
+        if (this.transcriptCreateBtn) this.transcriptCreateBtn.addEventListener('click', () => this.createNoteFromSelection());
+        if (this.transcriptDownloadBtn) this.transcriptDownloadBtn.addEventListener('click', () => this.downloadTranscript());
+        
+        // Autotranscribe features
+        if (this.autotranscribeBtn) this.autotranscribeBtn.addEventListener('click', () => this.toggleAutotranscribe());
+        if (this.fsAutotranscribeBtn) this.fsAutotranscribeBtn.addEventListener('click', () => this.toggleAutotranscribe());
+        
+        // Master title
+        if (this.masterTitleInput) {
+            this.masterTitleInput.value = this.masterTitle;
+            this.masterTitleInput.addEventListener('input', () => this.saveMasterTitle());
+        }
+        
+        // Preview modal
+        if (this.closePreviewBtn) this.closePreviewBtn.addEventListener('click', () => this.hidePreview());
         
         // Bind header dropdown events
         this.bindHeaderDropdownEvents();
@@ -216,6 +260,9 @@ class YouTubeNoteTaker {
             case 'markdown':
                 this.downloadAllNotesMarkdown(filename);
                 break;
+            case 'copy-markdown':
+                this.copyAllNotesMarkdown();
+                break;
             case 'csv':
                 this.downloadAllNotesCSV(filename);
                 break;
@@ -223,7 +270,8 @@ class YouTubeNoteTaker {
     }
 
     downloadAllNotesMarkdown(filename) {
-        let markdown = `# YouTube Notes Collection\n\n`;
+        const masterTitle = this.masterTitle || 'YouTube Notes Collection';
+        let markdown = `# ${masterTitle}\n\n`;
         markdown += `**Exported:** ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}\n\n`;
         markdown += `**Total Notes:** ${this.notes.length}\n\n`;
         markdown += `---\n\n`;
@@ -246,6 +294,37 @@ class YouTubeNoteTaker {
         
         this.downloadFile(markdown, `${filename}.md`, 'text/markdown');
         this.showMessage(`All ${this.notes.length} notes downloaded as Markdown successfully!`, 'success');
+    }
+
+    copyAllNotesMarkdown() {
+        if (this.notes.length === 0) {
+            this.showMessage('No saved notes to copy', 'error');
+            return;
+        }
+        
+        const masterTitle = this.masterTitle || 'YouTube Notes Collection';
+        let markdown = `# ${masterTitle}\n\n`;
+        markdown += `**Total Notes:** ${this.notes.length}\n\n`;
+        markdown += `---\n\n`;
+
+        this.notes.forEach((note, index) => {
+            const noteTitle = note.title || note.videoTitle || 'Untitled Note';
+            const createdDate = new Date(note.createdAt).toLocaleDateString();
+            const updatedDate = new Date(note.updatedAt).toLocaleDateString();
+            const timestamp = note.videoTimestamp ? `**Video Timestamp:** ${note.videoTimestamp}\n\n` : '';
+            
+            markdown += `## ${index + 1}. ${noteTitle}\n\n`;
+            markdown += `**Video:** [${note.videoTitle}](${note.videoUrl || 'N/A'})\n\n`;
+            markdown += `**Created:** ${createdDate}\n`;
+            markdown += `**Updated:** ${updatedDate}\n\n`;
+            markdown += timestamp;
+            markdown += `**Content:**\n\n`;
+            markdown += note.content + '\n\n';
+            markdown += `---\n\n`;
+        });
+        
+        this.copyToClipboard(markdown);
+        alert(`✅ Markdown copied successfully!\n\nAll ${this.notes.length} notes have been copied to your clipboard.\n\nYou can now paste them into any note-taking app.`);
     }
 
     downloadAllNotesCSV(filename) {
@@ -413,9 +492,11 @@ class YouTubeNoteTaker {
             this.videoExtraInfo.dataset.type = '';
             return;
         }
+        
         this.videoExtraInfo.innerHTML = 'Loading transcript...';
         this.videoExtraInfo.style.display = 'block';
         this.videoExtraInfo.dataset.type = 'transcript';
+        
         try {
             const response = await fetch(`http://localhost:8080/api/transcript/${this.currentVideoId}`);
             if (!response.ok) {
@@ -423,19 +504,66 @@ class YouTubeNoteTaker {
             }
             const data = await response.json();
             if (data.success && data.transcript && data.transcript.length > 0) {
+                this.transcriptEntries = data.transcript;
+                
+                // Create transcript controls
+                const controlsHtml = `
+                    <div class="transcript-controls">
+                        <div class="transcript-search-container">
+                            <input type="text" id="transcriptSearchInput" class="transcript-search-input" placeholder="Search transcript...">
+                            <div id="transcriptSearchResults" class="transcript-search-results"></div>
+                        </div>
+                        <div class="transcript-buttons">
+                            <button id="transcriptCreateBtn" class="transcript-btn transcript-btn-success" title="Create note from selected text">
+                                <i class="fas fa-plus"></i> Create Note
+                            </button>
+                            <button id="transcriptDownloadBtn" class="transcript-btn transcript-btn-secondary" title="Download transcript">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Create transcript content
                 let transcriptHtml = '<strong>Transcript:</strong><br><br>';
+                transcriptHtml += '<div id="transcriptContainer" class="transcript-container">';
                 data.transcript.forEach((entry, idx) => {
                     const time = this.formatTime(entry.start);
                     const text = entry.text;
-                    transcriptHtml += `<div class="transcript-entry">
+                    transcriptHtml += `<div class="transcript-entry" data-index="${idx}">
                         <span class="transcript-time clickable-time" data-seconds="${Math.floor(entry.start)}">[${time}]</span>
-                        <span class="transcript-text">${text}</span>
+                        <span class="transcript-text" data-text="${text.replace(/"/g, '&quot;')}">${text}</span>
                     </div>`;
                 });
-                this.videoExtraInfo.innerHTML = transcriptHtml;
+                transcriptHtml += '</div>';
+                
+                this.videoExtraInfo.innerHTML = controlsHtml + transcriptHtml;
                 this.currentVideoTranscript = data.transcript;
+                
+                // Re-initialize transcript elements
+                this.transcriptSearchInput = document.getElementById('transcriptSearchInput');
+                this.transcriptSearchResults = document.getElementById('transcriptSearchResults');
+                this.transcriptCreateBtn = document.getElementById('transcriptCreateBtn');
+                this.transcriptDownloadBtn = document.getElementById('transcriptDownloadBtn');
+                this.transcriptContainer = document.getElementById('transcriptContainer');
+                
+                // Add event listeners
+                if (this.transcriptSearchInput) this.transcriptSearchInput.addEventListener('input', () => this.searchTranscript());
+                if (this.transcriptCreateBtn) this.transcriptCreateBtn.addEventListener('click', () => this.createNoteFromSelection());
+                if (this.transcriptDownloadBtn) this.transcriptDownloadBtn.addEventListener('click', () => this.downloadTranscript());
+                
+                // Set initial state of Create Note button
+                if (this.transcriptCreateBtn) {
+                    this.transcriptCreateBtn.disabled = true;
+                    this.transcriptCreateBtn.style.opacity = '0.5';
+                }
+                
                 // Add click listeners to times
                 this.addTranscriptTimeListeners();
+                
+                // Add text selection listeners
+                this.addTranscriptSelectionListeners();
+                
             } else {
                 this.videoExtraInfo.innerHTML = `Transcript not available: ${data.error || 'Unknown error'}`;
             }
@@ -471,18 +599,106 @@ class YouTubeNoteTaker {
         }
     }
 
-    showPreview() {
+    togglePreview() {
+        const textarea = document.activeElement === this.fullscreenEditor ? this.fullscreenEditor : this.noteEditor;
+        const isInPreviewMode = textarea.style.display === 'none';
+        
+        if (isInPreviewMode) {
+            // Switch back to editor mode
+            textarea.style.display = '';
+            textarea.style.backgroundColor = '';
+            textarea.style.color = '';
+            textarea.style.fontFamily = '';
+            textarea.style.lineHeight = '';
+            textarea.style.padding = '';
+            textarea.style.border = '';
+            
+            // Find and remove the preview div by looking for it next to the textarea
+            const nextElement = textarea.nextSibling;
+            if (nextElement && nextElement.tagName === 'DIV' && nextElement.style.backgroundColor === 'rgb(248, 249, 250)') {
+                nextElement.remove();
+            }
+            
+            // Restore original markdown content
+            const originalContent = textarea.getAttribute('data-original-content');
+            if (originalContent) {
+                textarea.value = originalContent;
+                textarea.removeAttribute('data-original-content');
+            }
+            
+            // Update button icon
+            const previewBtn = document.activeElement === this.fullscreenEditor ? 
+                this.fsToolbarButtons.preview : this.toolbarButtons.preview;
+            previewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            previewBtn.title = 'Preview All Notes';
+            
+        } else {
+            // Show preview of all saved notes inline
+            this.showAllNotesPreviewInline();
+        }
+    }
+
+    showAllNotesPreviewInline() {
         if (!window.marked) {
             this.showMessage('Markdown preview is loading, please try again in a moment.', 'error');
             return;
         }
-        const title = this.noteTitleInput.value.trim();
-        const content = this.noteEditor.value.trim();
-        let md = '';
-        if (title) md += `# ${title}\n\n`;
-        md += content;
-        this.markdownPreview.innerHTML = window.marked.parse(md);
-        this.previewModal.classList.add('active');
+        
+        const textarea = document.activeElement === this.fullscreenEditor ? this.fullscreenEditor : this.noteEditor;
+        
+        // Generate markdown for all saved notes
+        const masterTitle = this.masterTitle || 'YouTube Notes Collection';
+        let markdown = `# ${masterTitle}\n\n`;
+        markdown += `**Total Notes:** ${this.notes.length}\n\n`;
+        markdown += `---\n\n`;
+
+        this.notes.forEach((note, index) => {
+            const noteTitle = note.title || note.videoTitle || 'Untitled Note';
+            const createdDate = new Date(note.createdAt).toLocaleDateString();
+            const updatedDate = new Date(note.updatedAt).toLocaleDateString();
+            const timestamp = note.videoTimestamp ? `**Video Timestamp:** ${note.videoTimestamp}\n\n` : '';
+            
+            markdown += `## ${index + 1}. ${noteTitle}\n\n`;
+            markdown += `**Video:** [${note.videoTitle}](${note.videoUrl || 'N/A'})\n\n`;
+            markdown += `**Created:** ${createdDate}\n`;
+            markdown += `**Updated:** ${updatedDate}\n\n`;
+            markdown += timestamp;
+            markdown += `**Content:**\n\n`;
+            markdown += note.content + '\n\n';
+            markdown += `---\n\n`;
+        });
+        
+        const htmlContent = window.marked.parse(markdown);
+        
+        // Create a temporary div to hold the HTML content
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        tempDiv.style.cssText = `
+            width: 100%;
+            height: 100%;
+            min-height: 200px;
+            background-color: #f8f9fa;
+            color: #333;
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        `;
+        
+        // Store original content and replace textarea with div
+        textarea.setAttribute('data-original-content', textarea.value);
+        textarea.style.display = 'none';
+        textarea.parentNode.insertBefore(tempDiv, textarea.nextSibling);
+        
+        // Update button icon
+        const previewBtn = document.activeElement === this.fullscreenEditor ? 
+            this.fsToolbarButtons.preview : this.toolbarButtons.preview;
+        previewBtn.innerHTML = '<i class="fas fa-edit"></i>';
+        previewBtn.title = 'Back to Editor';
     }
 
     hidePreview() {
@@ -1322,76 +1538,6 @@ class YouTubeNoteTaker {
         }
     }
 
-    togglePreview() {
-        const textarea = document.activeElement === this.fullscreenEditor ? this.fullscreenEditor : this.noteEditor;
-        const isInPreviewMode = textarea.style.display === 'none';
-        
-        if (isInPreviewMode) {
-            // Switch back to editor mode
-            textarea.style.display = '';
-            textarea.style.backgroundColor = '';
-            textarea.style.color = '';
-            textarea.style.fontFamily = '';
-            textarea.style.lineHeight = '';
-            textarea.style.padding = '';
-            textarea.style.border = '';
-            
-            // Find and remove the preview div by looking for it next to the textarea
-            const nextElement = textarea.nextSibling;
-            if (nextElement && nextElement.tagName === 'DIV' && nextElement.style.backgroundColor === 'rgb(248, 249, 250)') {
-                nextElement.remove();
-            }
-            
-            // Restore original markdown content
-            const originalContent = textarea.getAttribute('data-original-content');
-            if (originalContent) {
-                textarea.value = originalContent;
-                textarea.removeAttribute('data-original-content');
-            }
-            
-            // Update button icon
-            const previewBtn = document.activeElement === this.fullscreenEditor ? 
-                this.fsToolbarButtons.preview : this.toolbarButtons.preview;
-            previewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-            previewBtn.title = 'Preview Markdown';
-            
-        } else {
-            // Switch to preview mode
-            const markdownContent = textarea.value;
-            const htmlContent = this.convertMarkdownToHTML(markdownContent);
-            
-            // Create a temporary div to hold the HTML content
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = htmlContent;
-            tempDiv.style.cssText = `
-                width: 100%;
-                height: 100%;
-                min-height: 200px;
-                background-color: #f8f9fa;
-                color: #333;
-                font-family: Arial, sans-serif;
-                line-height: 1.6;
-                padding: 15px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                overflow-y: auto;
-                white-space: pre-wrap;
-                word-wrap: break-word;
-            `;
-            
-            // Store original content and replace textarea with div
-            textarea.setAttribute('data-original-content', markdownContent);
-            textarea.style.display = 'none';
-            textarea.parentNode.insertBefore(tempDiv, textarea.nextSibling);
-            
-            // Update button icon
-            const previewBtn = document.activeElement === this.fullscreenEditor ? 
-                this.fsToolbarButtons.preview : this.toolbarButtons.preview;
-            previewBtn.innerHTML = '<i class="fas fa-edit"></i>';
-            previewBtn.title = 'Edit Markdown';
-        }
-    }
-
     generateShareLink() {
         if (this.notes.length === 0) {
             this.showMessage('No saved notes to share', 'error');
@@ -1416,10 +1562,102 @@ class YouTubeNoteTaker {
         // Generate the share URL
         const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
         
-        // Copy to clipboard
-        this.copyToClipboard(shareUrl);
+        // Display the link in a modal or popup
+        this.showShareLinkModal(shareUrl);
+    }
+
+    showShareLinkModal(shareUrl) {
+        // Create modal HTML
+        const modalHTML = `
+            <div id="shareLinkModal" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0,0,0,0.7);
+                z-index: 2000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div style="
+                    background: white;
+                    border-radius: 12px;
+                    max-width: 500px;
+                    width: 90vw;
+                    padding: 30px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+                ">
+                    <h3 style="margin-top: 0; color: #333;">Share Link Generated</h3>
+                    <p style="color: #666; margin-bottom: 20px;">Your public link has been created. Click the link below to copy it:</p>
+                    <div style="
+                        background: #f8f9fa;
+                        border: 1px solid #ddd;
+                        border-radius: 6px;
+                        padding: 12px;
+                        margin-bottom: 20px;
+                        word-break: break-all;
+                        font-family: monospace;
+                        font-size: 14px;
+                        color: #007bff;
+                        cursor: pointer;
+                    " id="shareLinkDisplay">${shareUrl}</div>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button id="copyShareLinkBtn" style="
+                            background: #007bff;
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 600;
+                        ">Copy Link</button>
+                        <button id="closeShareModalBtn" style="
+                            background: #6c757d;
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                        ">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
         
-        this.showMessage('Public Link Copied', 'success');
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Add event listeners
+        const modal = document.getElementById('shareLinkModal');
+        const copyBtn = document.getElementById('copyShareLinkBtn');
+        const closeBtn = document.getElementById('closeShareModalBtn');
+        const linkDisplay = document.getElementById('shareLinkDisplay');
+        
+        // Copy link functionality
+        copyBtn.addEventListener('click', () => {
+            this.copyToClipboard(shareUrl);
+            this.showMessage('Public Link Copied', 'success');
+        });
+        
+        // Close modal
+        closeBtn.addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        // Click on link display to copy
+        linkDisplay.addEventListener('click', () => {
+            this.copyToClipboard(shareUrl);
+            this.showMessage('Public Link Copied', 'success');
+        });
+        
+        // Close modal when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
     }
 
     generateUniqueId() {
@@ -1494,6 +1732,273 @@ class YouTubeNoteTaker {
         
         const mainContent = document.querySelector('.main-content');
         mainContent.insertBefore(banner, mainContent.firstChild);
+    }
+
+    // Transcript search functionality
+    searchTranscript() {
+        const searchTerm = this.transcriptSearchInput.value.toLowerCase().trim();
+        const resultsContainer = this.transcriptSearchResults;
+        
+        if (!searchTerm) {
+            resultsContainer.classList.remove('show');
+            this.clearTranscriptHighlights();
+            return;
+        }
+        
+        const results = [];
+        this.transcriptEntries.forEach((entry, index) => {
+            if (entry.text.toLowerCase().includes(searchTerm)) {
+                results.push({
+                    index: index,
+                    text: entry.text,
+                    time: this.formatTime(entry.start)
+                });
+            }
+        });
+        
+        if (results.length > 0) {
+            resultsContainer.innerHTML = '';
+            results.forEach(result => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'transcript-search-result';
+                resultElement.innerHTML = `<strong>[${result.time}]</strong> ${result.text}`;
+                resultElement.addEventListener('click', () => {
+                    this.scrollToTranscriptEntry(result.index);
+                    this.highlightTranscriptEntry(result.index);
+                });
+                resultsContainer.appendChild(resultElement);
+            });
+            resultsContainer.classList.add('show');
+            this.highlightSearchTerms(searchTerm);
+        } else {
+            resultsContainer.innerHTML = '<div class="transcript-search-result">No results found</div>';
+            resultsContainer.classList.add('show');
+            this.clearTranscriptHighlights();
+        }
+    }
+
+    scrollToTranscriptEntry(index) {
+        const entry = this.transcriptContainer.querySelector(`[data-index="${index}"]`);
+        if (entry) {
+            entry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    highlightTranscriptEntry(index) {
+        this.clearTranscriptHighlights();
+        const entry = this.transcriptContainer.querySelector(`[data-index="${index}"]`);
+        if (entry) {
+            entry.style.backgroundColor = '#fff3cd';
+            entry.style.borderRadius = '4px';
+            entry.style.padding = '4px';
+        }
+    }
+
+    highlightSearchTerms(searchTerm) {
+        const textElements = this.transcriptContainer.querySelectorAll('.transcript-text');
+        textElements.forEach(element => {
+            const text = element.textContent;
+            const regex = new RegExp(`(${searchTerm})`, 'gi');
+            element.innerHTML = text.replace(regex, '<span class="transcript-text highlighted">$1</span>');
+        });
+    }
+
+    clearTranscriptHighlights() {
+        const textElements = this.transcriptContainer.querySelectorAll('.transcript-text');
+        textElements.forEach(element => {
+            element.innerHTML = element.textContent;
+        });
+        
+        const entries = this.transcriptContainer.querySelectorAll('.transcript-entry');
+        entries.forEach(entry => {
+            entry.style.backgroundColor = '';
+            entry.style.borderRadius = '';
+            entry.style.padding = '';
+        });
+    }
+
+    addTranscriptSelectionListeners() {
+        const textElements = this.transcriptContainer.querySelectorAll('.transcript-text');
+        textElements.forEach(element => {
+            element.addEventListener('mouseup', () => {
+                const selection = window.getSelection();
+                if (selection.toString().trim()) {
+                    this.transcriptCreateBtn.style.opacity = '1';
+                    this.transcriptCreateBtn.disabled = false;
+                } else {
+                    this.transcriptCreateBtn.style.opacity = '0.5';
+                    this.transcriptCreateBtn.disabled = true;
+                }
+            });
+        });
+    }
+
+    createNoteFromSelection() {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        
+        if (!selectedText) {
+            this.showMessage('Please select some text from the transcript first', 'error');
+            return;
+        }
+        
+        // Get the current video info
+        const videoTitle = this.videoTitle.textContent || 'Unknown Video';
+        const videoUrl = this.youtubeLinkInput.value || '';
+        const timestamp = this.manualTimestamp.value || '0:00';
+        
+        // Create a new note
+        const note = {
+            id: Date.now().toString(),
+            title: `Transcript Quote: ${selectedText.substring(0, 50)}${selectedText.length > 50 ? '...' : ''}`,
+            content: selectedText,
+            videoTitle: videoTitle,
+            videoUrl: videoUrl,
+            videoTimestamp: timestamp,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        this.notes.push(note);
+        this.saveToLocalStorage();
+        this.loadNotes();
+        
+        this.showMessage('Note created from transcript selection!', 'success');
+        
+        // Clear selection
+        selection.removeAllRanges();
+        this.transcriptCreateBtn.style.opacity = '0.5';
+        this.transcriptCreateBtn.disabled = true;
+    }
+
+    downloadTranscript() {
+        if (!this.transcriptEntries || this.transcriptEntries.length === 0) {
+            this.showMessage('No transcript available to download', 'error');
+            return;
+        }
+        
+        let transcriptText = `Transcript for: ${this.videoTitle.textContent}\n`;
+        transcriptText += `Video URL: ${this.youtubeLinkInput.value}\n`;
+        transcriptText += `Downloaded: ${new Date().toLocaleString()}\n\n`;
+        
+        this.transcriptEntries.forEach(entry => {
+            const time = this.formatTime(entry.start);
+            transcriptText += `[${time}] ${entry.text}\n`;
+        });
+        
+        const filename = `transcript_${this.currentVideoId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+        this.downloadFile(transcriptText, filename, 'text/plain');
+        this.showMessage('Transcript downloaded successfully!', 'success');
+    }
+
+    // Autotranscribe functionality
+    toggleAutotranscribe() {
+        if (!this.currentVideoId || !this.transcriptEntries || this.transcriptEntries.length === 0) {
+            this.showMessage('Please load a video with transcript first', 'error');
+            return;
+        }
+        
+        if (this.isTranscribing) {
+            this.stopAutotranscribe();
+        } else {
+            this.startAutotranscribe();
+        }
+    }
+
+    startAutotranscribe() {
+        this.isTranscribing = true;
+        
+        // Get current video time and find the corresponding transcript index
+        let currentTime = 0;
+        if (this.player && typeof this.player.getCurrentTime === 'function') {
+            currentTime = this.player.getCurrentTime();
+        }
+        
+        // Find the transcript entry closest to current time
+        this.currentTranscriptIndex = 0;
+        for (let i = 0; i < this.transcriptEntries.length; i++) {
+            if (this.transcriptEntries[i].start >= currentTime) {
+                this.currentTranscriptIndex = i;
+                break;
+            }
+        }
+        
+        // Update button appearance
+        this.autotranscribeBtn.classList.add('transcribing');
+        this.autotranscribeBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        this.autotranscribeBtn.title = 'Stop Auto-transcribe';
+        
+        if (this.fsAutotranscribeBtn) {
+            this.fsAutotranscribeBtn.classList.add('transcribing');
+            this.fsAutotranscribeBtn.innerHTML = '<i class="fas fa-stop"></i>';
+            this.fsAutotranscribeBtn.title = 'Stop Auto-transcribe';
+        }
+        
+        this.showMessage(`Auto-transcribe started from ${this.formatTime(currentTime)}. Click the button again to stop.`, 'success');
+        
+        // Start the transcription interval
+        this.transcriptionInterval = setInterval(() => {
+            this.addNextTranscriptEntry();
+        }, 2000); // Add new text every 2 seconds
+    }
+
+    stopAutotranscribe() {
+        this.isTranscribing = false;
+        
+        if (this.transcriptionInterval) {
+            clearInterval(this.transcriptionInterval);
+            this.transcriptionInterval = null;
+        }
+        
+        // Update button appearance
+        this.autotranscribeBtn.classList.remove('transcribing');
+        this.autotranscribeBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+        this.autotranscribeBtn.title = 'Auto-transcribe from video';
+        
+        if (this.fsAutotranscribeBtn) {
+            this.fsAutotranscribeBtn.classList.remove('transcribing');
+            this.fsAutotranscribeBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            this.fsAutotranscribeBtn.title = 'Auto-transcribe from video';
+        }
+        
+        this.showMessage('Auto-transcribe stopped.', 'success');
+    }
+
+    addNextTranscriptEntry() {
+        if (this.currentTranscriptIndex >= this.transcriptEntries.length) {
+            this.stopAutotranscribe();
+            this.showMessage('Auto-transcribe completed - reached end of transcript', 'success');
+            return;
+        }
+        
+        const entry = this.transcriptEntries[this.currentTranscriptIndex];
+        const textToAdd = entry.text + ' ';
+        
+        // Determine which editor is active
+        const activeEditor = document.activeElement === this.fullscreenEditor ? this.fullscreenEditor : this.noteEditor;
+        
+        // Add text to the end of the editor
+        const currentContent = activeEditor.value;
+        activeEditor.value = currentContent + textToAdd;
+        
+        // Trigger change event
+        if (activeEditor === this.noteEditor) {
+            this.handleEditorChange();
+        } else {
+            this.handleFullscreenEditorChange();
+        }
+        
+        // Move to next entry
+        this.currentTranscriptIndex++;
+        
+        // Scroll to bottom of editor
+        activeEditor.scrollTop = activeEditor.scrollHeight;
+    }
+
+    saveMasterTitle() {
+        this.masterTitle = this.masterTitleInput.value.trim();
+        localStorage.setItem('masterTitle', this.masterTitle);
+        this.showMessage('Master title saved successfully!', 'success');
     }
 }
 
