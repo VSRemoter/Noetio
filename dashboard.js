@@ -35,11 +35,40 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add event listeners to existing auth buttons
     setupAuthButtonListeners();
     
-    // Initialize dashboard
-    initializeDashboard();
-    
     // Add event listeners for modals
     setupModalEventListeners();
+    
+    // Listen for the custom event from AuthManager to load user's data
+    document.addEventListener('userDataReady', (e) => {
+        console.log('Event userDataReady received by dashboard.');
+        if (e.detail) {
+            // Overwrite local arrays with fresh data from the database
+            videos = e.detail.videos || [];
+            playlists = e.detail.playlists || [];
+
+            // Clear legacy local storage to prevent using stale data on next load
+            localStorage.removeItem(DASHBOARD_STORAGE_KEY);
+            localStorage.removeItem(PLAYLISTS_STORAGE_KEY);
+            
+            console.log('Dashboard data updated from event:', { videos, playlists });
+            
+            // Render the dashboard with the new, correct data
+            renderDashboard();
+        }
+    });
+
+    // Fallback for when the page loads and user is already logged in,
+    // but the event fires before this listener is attached.
+    if (authManager && authManager.isAuthenticated) {
+        authManager.syncUserData();
+    }
+    
+    // Listen for UI messages from the AuthManager
+    document.addEventListener('authMessage', (e) => {
+        if (e.detail) {
+            showMessage(e.detail.message, e.detail.type);
+        }
+    });
 });
 
 function setupAuthButtonListeners() {
@@ -255,34 +284,56 @@ if (modalCancelBtn) {
     });
 }
 if (modalCreateBtn) {
-    modalCreateBtn.addEventListener('click', () => {
-        const title = modalMasterTitle.value.trim();
+    modalCreateBtn.addEventListener('click', async () => {
         const url = modalVideoUrl.value.trim();
-        if (!title || !url) {
-            alert('Please enter both a title and a YouTube video URL.');
+        const title = modalMasterTitle.value.trim();
+        if (!url || !title) {
+            alert('Please enter both a title and a valid YouTube URL.');
             return;
         }
-        // Extract YouTube video ID
+
         const videoId = extractYouTubeVideoId(url);
         if (!videoId) {
-            alert('Invalid YouTube URL');
+            alert('Invalid YouTube URL. Please enter a valid video URL.');
             return;
         }
-        // Save video to dashboard (if not already present)
-        let videos = JSON.parse(localStorage.getItem('dashboardVideos') || '[]');
-        let added = false;
-        if (!videos.some(v => v.videoId === videoId)) {
-            videos.push({ videoId, url, title, created: Date.now() });
-            localStorage.setItem('dashboardVideos', JSON.stringify(videos));
-            added = true;
+
+        // Use the AuthManager to fetch real video info
+        const videoInfo = await authManager.fetchYouTubeVideoInfo(videoId);
+        if (!videoInfo) {
+            alert('Could not fetch video information. Please check the URL and try again.');
+            return;
         }
-        if (added) {
-            renderDashboard(); // Immediately update dashboard UI
+        
+        const videoData = {
+            master_title: title,
+            video_id: videoId,
+            title: videoInfo.title,
+            channel_name: videoInfo.channel,
+            duration: videoInfo.duration,
+            thumbnail_url: videoInfo.thumbnail,
+            published_at: videoInfo.publishedAt,
+            url: url
+        };
+        
+        // Use AuthManager to save the video, which handles DB operations
+        const { success, error } = await authManager.saveVideo(videoData);
+        
+        if (success) {
+            // Prepare a pending note for the note editor page
+            localStorage.setItem('pendingNote', JSON.stringify({
+                url: url,
+                title: title,
+                videoId: videoId
+            }));
+            
+            // Redirect to the note editor page
+            window.location.href = 'note.html';
+        } else {
+            alert(`Error: ${error.message}`);
         }
-        // Pass data to note.html via localStorage (for prefill)
-        localStorage.setItem('pendingNote', JSON.stringify({ videoId, url, title }));
-        // Open note.html
-        window.location.href = 'note.html';
+        
+        createNoteModal.style.display = 'none';
     });
 }
 // Close modal on outside click
@@ -348,46 +399,6 @@ function extractYouTubeVideoId(url) {
     const match = url.match(regex);
     return match ? match[1] : null;
 }
-async function fetchYouTubeVideoInfo(videoId) {
-    // Try to use YouTube Data API if available, else fallback
-    const apiKey = '';
-    if (!apiKey) {
-        // Fallback: just thumbnail
-        return {
-            videoId,
-            title: 'YouTube Video',
-            channel: '',
-            duration: '',
-            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-            tags: []
-        };
-    }
-    try {
-        const resp = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${apiKey}`);
-        const data = await resp.json();
-        if (data.items && data.items.length > 0) {
-            const item = data.items[0];
-            return {
-                videoId,
-                title: item.snippet.title,
-                channel: item.snippet.channelTitle,
-                duration: parseYouTubeDuration(item.contentDetails.duration),
-                thumbnail: item.snippet.thumbnails.high.url,
-                tags: []
-            };
-        }
-    } catch (e) {}
-    return null;
-}
-function parseYouTubeDuration(ytDuration) {
-    // e.g. PT1H2M3S
-    const match = ytDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return '';
-    const h = match[1] ? match[1] + ':' : '';
-    const m = match[2] ? match[2].padStart(2, '0') + ':' : '00:';
-    const s = match[3] ? match[3].padStart(2, '0') : '00';
-    return h + m + s;
-}
 
 // --- Initial Render ---
 function initializeDashboard() {
@@ -395,4 +406,24 @@ function initializeDashboard() {
     setTimeout(() => {
         renderDashboard();
     }, 100);
+}
+
+function showMessage(message, type = 'success') {
+    const messageContainer = document.createElement('div');
+    messageContainer.className = `auth-message ${type}`;
+    messageContainer.textContent = message;
+    
+    // Prepend to the main dashboard area
+    const container = document.querySelector('.dashboard-main');
+    if (container) {
+        container.insertBefore(messageContainer, container.firstChild);
+        // Add animation class
+        setTimeout(() => messageContainer.classList.add('visible'), 10);
+    }
+
+    // Remove after a few seconds
+    setTimeout(() => {
+        messageContainer.classList.remove('visible');
+        setTimeout(() => messageContainer.remove(), 500);
+    }, 4000);
 }

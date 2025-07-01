@@ -14,9 +14,16 @@ try {
     console.error('Error initializing Supabase:', error);
 }
 
+// Ensure there is only ever one instance of the AuthManager.
+let authManagerInstance = null;
+
 // Authentication state management
 class AuthManager {
     constructor() {
+        if (authManagerInstance) {
+            return authManagerInstance;
+        }
+
         this.user = null;
         this.userProfile = null;
         this.isAuthenticated = false;
@@ -27,6 +34,7 @@ class AuthManager {
         }
         
         this.init();
+        authManagerInstance = this;
     }
 
     async init() {
@@ -39,30 +47,34 @@ class AuthManager {
     }
     
     async initAuth() {
-        // Check for existing session
+        // Check for existing session on page load
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
             this.user = session.user;
             this.isAuthenticated = true;
             await this.loadUserProfile();
-            this.onAuthStateChange();
+            this.onAuthStateChange(); // This syncs data and UI
         } else {
             // If no session, still update the UI to show login/signup buttons
             this.updateAuthUI();
         }
 
-        // Listen for auth changes
+        // This listener now ONLY handles background changes, NOT the initial login flow,
+        // which is now handled synchronously by the login() function.
         supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN') {
-                this.user = session.user;
-                this.isAuthenticated = true;
-                await this.loadUserProfile();
-            } else if (event === 'SIGNED_OUT') {
+            // The initial SIGNED_IN is handled by the robust login() function to prevent race conditions.
+            // This listener only reacts to external events like logout or token refreshes.
+            if (event === 'SIGNED_OUT') {
                 this.user = null;
                 this.userProfile = null;
                 this.isAuthenticated = false;
+                this.onAuthStateChange();
+            } else if (event === 'USER_UPDATED') {
+                // This handles cases where user data changes in another tab or a token is refreshed.
+                this.user = session.user;
+                await this.loadUserProfile();
+                this.onAuthStateChange();
             }
-            this.onAuthStateChange();
         });
     }
 
@@ -128,7 +140,6 @@ class AuthManager {
             `;
             document.getElementById('signUpBtn')?.addEventListener('click', () => this.showAuthModal('signup'));
             document.getElementById('loginBtn')?.addEventListener('click', () => this.showAuthModal('login'));
-            document.getElementById('debugBtn')?.addEventListener('click', () => this.runDebugTests());
         }
     }
 
@@ -270,42 +281,30 @@ class AuthManager {
 
     async login(email, password) {
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-            
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
             if (error) {
-                console.error('Login error:', error);
+                const msg = error.message.toLowerCase();
+                if (msg.includes('invalid login credentials')) return { success: false, message: 'Incorrect email or password.' };
+                if (msg.includes('email not confirmed')) return { success: false, message: 'Please verify your email first.', errorType: 'unverified_email' };
+                return { success: false, message: error.message };
+            }
+
+            if (data.user) {
+                console.log('Login successful, starting synchronous state update...');
+                // This is the critical synchronous flow.
+                this.user = data.user;
+                this.isAuthenticated = true;
+                await this.loadUserProfile();
+                this.onAuthStateChange(); // This calls updateAuthUI() AND syncUserData()
                 
-                // Handle specific error cases
-                if (error.message.includes('Invalid login credentials')) {
-                    return { success: false, message: 'Invalid email or password. Please try again.' };
-                } else if (error.message.includes('Email not confirmed')) {
-                    return { success: false, message: 'Please check your email and click the verification link before logging in.' };
-                } else if (error.message.includes('network') || error.message.includes('fetch')) {
-                    return { success: false, message: 'Network error. Please check your connection and try again.' };
-                } else {
-                    return { success: false, message: `Login failed: ${error.message}` };
-                }
+                console.log('Synchronous state update complete.');
+                return { success: true };
             }
-            
-            if (!data.user) {
-                return { success: false, message: 'Login failed. Please try again.' };
-            }
-            
-            // Create user profile if it doesn't exist (first login)
-            try {
-                await this.createUserProfile(data.user.id, email, data.user.user_metadata?.first_name || '', data.user.user_metadata?.last_name || '');
-            } catch (profileError) {
-                console.error('Profile creation error during login:', profileError);
-                // Don't fail login if profile creation fails
-            }
-            
-            return { success: true, message: 'Login successful!' };
+            return { success: false, message: 'An unknown error occurred.' };
         } catch (error) {
-            console.error('Login error:', error);
-            return { success: false, message: `Login failed: ${error.message}` };
+            console.error('Catastrophic login error:', error);
+            return { success: false, message: 'An unexpected error occurred.' };
         }
     }
 
@@ -348,6 +347,21 @@ class AuthManager {
 
     async resendVerification(email) {
         try {
+            // Disable for 3 seconds to prevent spam
+            let countdown = 3;
+            const originalText = 'Resend Verification Email';
+            const interval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    submitBtn.innerHTML = `Wait ${countdown}s`;
+                } else {
+                    clearInterval(interval);
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                }
+            }, 1000);
+            submitBtn.innerHTML = `Wait ${countdown}s`;
+            
             const { error } = await supabase.auth.resend({
                 type: 'signup',
                 email: email
@@ -440,117 +454,52 @@ class AuthManager {
 
     async handleAuthSubmit(e, type) {
         e.preventDefault();
-        console.log('Form submitted for type:', type);
-        
+        const submitBtn = document.getElementById('authSubmitBtn');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+        submitBtn.disabled = true;
+
         const formData = new FormData(e.target);
         const email = formData.get('email');
         const password = formData.get('password');
-        const confirmPassword = formData.get('confirmPassword');
-        const firstName = formData.get('firstName');
-        const lastName = formData.get('lastName');
-
-        console.log('Form data:', { email, firstName, lastName, passwordLength: password?.length });
-
-        // Validate all required fields for signup
-        if (type === 'signup') {
-            // Check if all required fields are filled
-            if (!email || !email.trim()) {
-                this.showMessage('Email is required', 'error');
-                return;
-            }
-            if (!password || !password.trim()) {
-                this.showMessage('Password is required', 'error');
-                return;
-            }
-            if (!firstName || !firstName.trim()) {
-                this.showMessage('First name is required', 'error');
-                return;
-            }
-            if (!lastName || !lastName.trim()) {
-                this.showMessage('Last name is required', 'error');
-                return;
-            }
-            if (!confirmPassword || !confirmPassword.trim()) {
-                this.showMessage('Please confirm your password', 'error');
-                return;
-            }
-            
-            // Validate password confirmation
-            if (password !== confirmPassword) {
-                this.showMessage('Passwords do not match', 'error');
-                return;
-            }
-            if (password.length < 6) {
-                this.showMessage('Password must be at least 6 characters long', 'error');
-                return;
-            }
-            
-            // Validate email format
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                this.showMessage('Please enter a valid email address', 'error');
-                return;
-            }
-        } else if (type === 'login') {
-            // Validate login fields
-            if (!email || !email.trim()) {
-                this.showMessage('Email is required', 'error');
-                return;
-            }
-            if (!password || !password.trim()) {
-                this.showMessage('Password is required', 'error');
-                return;
-            }
-            
-            // Validate email format for login
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                this.showMessage('Please enter a valid email address', 'error');
-                return;
-            }
-        }
-
-        const submitBtn = document.getElementById('authSubmitBtn');
-        if (!submitBtn) {
-            console.error('Submit button not found');
-            return;
-        }
-
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Loading...';
-        submitBtn.disabled = true;
 
         try {
-            console.log('Calling auth method for type:', type);
             let result;
             if (type === 'signup') {
+                const firstName = formData.get('firstName');
+                const lastName = formData.get('lastName');
+                const confirmPassword = formData.get('confirmPassword');
+                if (password !== confirmPassword) {
+                    this.showMessage('Passwords do not match.', 'error');
+                    return;
+                }
                 result = await this.signUp(email, password, firstName, lastName);
             } else {
+                // Await the entire login and data sync process.
                 result = await this.login(email, password);
             }
 
-            console.log('Auth result:', result);
-
             if (result.success) {
-                this.showMessage(result.message, 'success');
-                if (type === 'login') {
-                    document.getElementById('authModal').style.display = 'none';
+                // On successful signup, show the confirmation message.
+                if (type === 'signup') {
+                    this.showMessage(result.message, 'success');
                 }
+                // Only hide the modal after the entire process is complete.
+                document.getElementById('authModal').style.display = 'none';
             } else {
-                if (result.errorType === 'duplicate_email') {
-                    // Show special popup for duplicate email
-                    this.showDuplicateEmailPopup(email);
-                } else {
+                if (result.errorType === 'duplicate_email') this.showDuplicateEmailPopup(email);
+                else if (result.errorType === 'unverified_email') {
                     this.showMessage(result.message, 'error');
+                    const resendBtn = document.getElementById('resendVerificationBtn');
+                    if(resendBtn) resendBtn.style.display = 'block';
                 }
+                else this.showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('Auth submission error:', error);
-            this.showMessage('An unexpected error occurred. Please try again.', 'error');
+            this.showMessage('An unexpected error occurred.', 'error');
         } finally {
-            // Always re-enable the button
-            console.log('Re-enabling submit button');
-            submitBtn.textContent = originalText;
+            submitBtn.innerHTML = originalBtnText;
             submitBtn.disabled = false;
         }
     }
@@ -614,17 +563,11 @@ class AuthManager {
         }
     }
 
-    showMessage(message, type) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `auth-message ${type}`;
-        messageDiv.textContent = message;
-        
-        const modal = document.getElementById('authModal') || document.getElementById('userProfileModal');
-        modal.appendChild(messageDiv);
-        
-        setTimeout(() => {
-            messageDiv.remove();
-        }, 5000);
+    showMessage(message, type = 'info') {
+        const event = new CustomEvent('authMessage', {
+            detail: { message, type }
+        });
+        document.dispatchEvent(event);
     }
 
     // Video Management
@@ -826,30 +769,21 @@ class AuthManager {
 
     // Legacy sync methods for backward compatibility
     async syncUserData() {
-        if (!this.isAuthenticated) return;
+        if (!this.user) return;
+        try {
+            console.log('Syncing user data from database...');
+            const videos = await this.getVideos();
+            const playlists = await this.getPlaylists();
+            
+            // Dispatch a custom event with the fetched data so the UI can update
+            const event = new CustomEvent('userDataReady', { 
+                detail: { videos, playlists } 
+            });
+            document.dispatchEvent(event);
+            console.log('Dispatched userDataReady event with user data.');
 
-        // Sync local storage data with new database structure
-        const localVideos = JSON.parse(localStorage.getItem('dashboardVideos') || '[]');
-        const localPlaylists = JSON.parse(localStorage.getItem('dashboardPlaylists') || '[]');
-        const localTags = JSON.parse(localStorage.getItem('dashboardTags') || '[]');
-
-        // Migrate local data to new structure
-        for (const video of localVideos) {
-            await this.saveVideo(video);
-        }
-
-        for (const playlist of localPlaylists) {
-            await this.savePlaylist(playlist);
-        }
-
-        // Clear local storage after migration
-        localStorage.removeItem('dashboardVideos');
-        localStorage.removeItem('dashboardPlaylists');
-        localStorage.removeItem('dashboardTags');
-
-        // Refresh dashboard
-        if (typeof renderDashboard === 'function') {
-            renderDashboard();
+        } catch (error) {
+            console.error('Error syncing user data:', error);
         }
     }
 
@@ -993,53 +927,63 @@ class AuthManager {
         }
     }
 
-    // Test function to debug signup issues
-    async debugSignup(email, password, firstName, lastName) {
-        console.log('=== DEBUG SIGNUP START ===');
-        console.log('Testing with:', { email, firstName, lastName, passwordLength: password?.length });
-        
-        // Test database connection first
-        const dbConnected = await this.testDatabaseConnection();
-        console.log('Database connected:', dbConnected);
-        
-        if (!dbConnected) {
-            console.error('Database connection failed - cannot proceed with signup');
-            return;
+    // ================================================================================================
+    // YOUTUBE DATA API
+    // ================================================================================================
+    
+    // API Key for YouTube Data API v3
+    apiKey = 'AIzaSyBrj1ZEzZoRoyvOEkkUHMt3awRVebVuZ0g'; // Replace with your actual key if needed
+
+    async fetchYouTubeVideoInfo(videoId) {
+        if (!this.apiKey) {
+            console.warn('YouTube API key not set. Returning basic info.');
+            return {
+                title: 'Title unavailable (API key needed)',
+                channel: 'Channel unavailable (API key needed)',
+                description: '',
+                duration: '00:00',
+                thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
+            };
         }
-        
-        // Test the signup process
-        const result = await this.signUp(email, password, firstName, lastName);
-        console.log('Signup result:', result);
-        console.log('=== DEBUG SIGNUP END ===');
-        
-        return result;
+
+        const url = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet,contentDetails&key=${this.apiKey}`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.error('YouTube API Error:', response.status, await response.text());
+                return null;
+            }
+            const data = await response.json();
+            if (!data.items || data.items.length === 0) {
+                return null;
+            }
+            const item = data.items[0];
+            return {
+                title: item.snippet.title,
+                channel: item.snippet.channelTitle,
+                description: item.snippet.description,
+                duration: this.parseYouTubeDuration(item.contentDetails.duration),
+                thumbnail: item.snippet.thumbnails.medium.url,
+                publishedAt: item.snippet.publishedAt
+            };
+        } catch (error) {
+            console.error('Error fetching video info:', error);
+            return null;
+        }
     }
 
-    // Run comprehensive debug tests
-    async runDebugTests() {
-        console.log('=== RUNNING DEBUG TESTS ===');
-        
-        // Test 1: Database connection
-        console.log('Test 1: Database Connection');
-        const dbConnected = await this.testDatabaseConnection();
-        console.log('Database connected:', dbConnected);
-        
-        // Test 2: Try signup with existing email
-        console.log('\nTest 2: Signup with existing email');
-        const existingResult = await this.debugSignup('test@example.com', 'password123', 'Test', 'User');
-        console.log('Existing email result:', existingResult);
-        
-        // Test 3: Try signup with new email
-        console.log('\nTest 3: Signup with new email');
-        const timestamp = Date.now();
-        const newEmail = `test${timestamp}@example.com`;
-        const newResult = await this.debugSignup(newEmail, 'password123', 'Test', 'User');
-        console.log('New email result:', newResult);
-        
-        console.log('=== DEBUG TESTS COMPLETE ===');
-        
-        // Show results in UI
-        this.showMessage(`Debug tests complete. Check console for details.`, 'success');
+    parseYouTubeDuration(ytDuration) {
+        const match = ytDuration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+        const hours = (parseInt(match[1], 10) || 0);
+        const minutes = (parseInt(match[2], 10) || 0);
+        const seconds = (parseInt(match[3], 10) || 0);
+        let duration = '';
+        if (hours > 0) {
+            duration += `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+            duration += `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        return duration;
     }
 }
 
