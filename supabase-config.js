@@ -148,29 +148,24 @@ class AuthManager {
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
-                options: { data: { first_name: firstName, last_name: lastName } }
+                options: {
+                    data: { first_name: firstName, last_name: lastName }
+                }
             });
 
             if (error) {
-                const msg = error.message.toLowerCase();
-                if (msg.includes('error sending confirmation email')) {
-                    return { success: true, message: 'Check your email for a verification link!' };
-                }
-                if (msg.includes('user already registered')) {
+                // This is the most reliable way to check for a duplicate user.
+                if (error.message.toLowerCase().includes('user already registered')) {
                     return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
                 }
-                return { success: false, message: error.message };
+                // For any other error (including SMTP issues), report it as a generic failure.
+                // This prevents the UI from giving misleading success messages.
+                return { success: false, message: 'Could not complete signup. Please check your details and try again.' };
             }
 
+            // If there's no error, and we have a user, it's a success.
             if (data.user) {
-                const createdAt = new Date(data.user.created_at).getTime();
-                const updatedAt = new Date(data.user.updated_at).getTime();
-
-                if (updatedAt - createdAt > 2000) { // 2-second threshold
-                    return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
-                } else {
-                    return { success: true, message: 'Check your email for a verification link!' };
-                }
+                 return { success: true, message: 'Check your email for a verification link!' };
             }
 
             return { success: false, message: 'An unknown error occurred during signup.' };
