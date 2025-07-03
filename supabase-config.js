@@ -416,31 +416,32 @@ class AuthManager {
                 const confirmPassword = formData.get('confirmPassword');
                 if (password !== confirmPassword) {
                     this.showMessage('Passwords do not match.', 'error');
+                    submitBtn.innerHTML = originalBtnText;
+                    submitBtn.disabled = false;
                     return;
                 }
                 result = await this.signUp(email, password, firstName, lastName);
             } else {
-                // Await the entire login and data sync process.
                 result = await this.login(email, password);
             }
 
             if (result.success) {
-                // On successful signup, show the confirmation message.
                 if (type === 'signup') {
                     this.showMessage(result.message, 'success');
                 }
-                // Only hide the modal after the entire process is complete.
                 document.getElementById('authModal').style.display = 'none';
             } else {
                 if (result.errorType === 'duplicate_email') {
-                    this.showDuplicateEmailPopup(email);
+                    this.showMessage(result.message, 'error');
+                    this.showAuthModal('login');
+                    const authEmailInput = document.getElementById('authEmail');
+                    if (authEmailInput) {
+                        authEmailInput.value = email;
+                    }
                 } else if (result.errorType === 'unverified_email') {
                     this.showMessage(result.message, 'error');
                     const resendBtn = document.getElementById('resendVerificationBtn');
                     if(resendBtn) resendBtn.style.display = 'block';
-                } else if (result.errorType === 'rate_limit') {
-                    this.showMessage(result.message, 'error');
-                    // Don't hide modal for rate limit errors, let user try again
                 } else {
                     this.showMessage(result.message, 'error');
                 }
@@ -449,8 +450,10 @@ class AuthManager {
             console.error('Auth submission error:', error);
             this.showMessage('An unexpected error occurred.', 'error');
         } finally {
-            submitBtn.innerHTML = originalBtnText;
-            submitBtn.disabled = false;
+            if (type !== 'signup' || document.getElementById('authModalTitle').textContent !== 'Login') {
+                submitBtn.innerHTML = originalBtnText;
+                submitBtn.disabled = false;
+            }
         }
     }
 
@@ -753,106 +756,6 @@ class AuthManager {
                 });
         } catch (error) {
             console.error('Error tracking activity:', error);
-        }
-    }
-
-    async showDuplicateEmailPopup(email) {
-        // Create a custom popup for duplicate email
-        const popup = document.createElement('div');
-        popup.className = 'duplicate-email-popup';
-        popup.innerHTML = `
-            <div class="duplicate-email-content">
-                <div class="duplicate-email-header">
-                    <h3><i class="fas fa-exclamation-triangle"></i> Email Already Registered</h3>
-                    <button class="close-popup-btn" onclick="this.closest('.duplicate-email-popup').remove()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="duplicate-email-body">
-                    <p>An account with the email <strong>${email}</strong> already exists.</p>
-                    <p>What would you like to do?</p>
-                    <div class="duplicate-email-options">
-                        <button class="option-btn login-option" onclick="this.closest('.duplicate-email-popup').remove(); window.authManager.showAuthModal('login');">
-                            <i class="fas fa-sign-in-alt"></i>
-                            Login to Existing Account
-                        </button>
-                        <button class="option-btn reset-option" onclick="this.closest('.duplicate-email-popup').remove(); window.authManager.showResetPasswordModal('${email}');">
-                            <i class="fas fa-key"></i>
-                            Reset Password
-                        </button>
-                        <button class="option-btn cancel-option" onclick="this.closest('.duplicate-email-popup').remove();">
-                            <i class="fas fa-times"></i>
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Add to page
-        document.body.appendChild(popup);
-        
-        // Close on outside click
-        popup.addEventListener('click', (e) => {
-            if (e.target === popup) {
-                popup.remove();
-            }
-        });
-    }
-
-    showResetPasswordModal(email) {
-        // Create a simple reset password modal
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content auth-modal-content">
-                <div class="auth-header">
-                    <h2>Reset Password</h2>
-                    <button class="close-btn" onclick="this.closest('.modal').remove()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="auth-form">
-                    <div class="form-group">
-                        <label>Email:</label>
-                        <input type="email" value="${email}" readonly style="background: #f8f9fa;">
-                    </div>
-                    <div class="form-actions">
-                        <button class="auth-submit-btn" onclick="window.authManager.sendResetPassword('${email}', this)">
-                            Send Reset Link
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        modal.style.display = 'flex';
-        
-        // Close on outside click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-    }
-
-    async sendResetPassword(email, button) {
-        try {
-            button.textContent = 'Sending...';
-            button.disabled = true;
-            
-            const { error } = await supabase.auth.resetPasswordForEmail(email);
-            
-            if (error) throw error;
-            
-            this.showMessage('Password reset link sent! Check your email.', 'success');
-            button.closest('.modal').remove();
-        } catch (error) {
-            this.showMessage(error.message, 'error');
-        } finally {
-            button.textContent = 'Send Reset Link';
-            button.disabled = false;
         }
     }
 
