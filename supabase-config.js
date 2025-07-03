@@ -145,6 +145,40 @@ class AuthManager {
 
     async signUp(email, password, firstName, lastName) {
         try {
+            // First, check if user already exists by trying to sign in
+            const { data: existingUser } = await supabase.auth.signInWithPassword({
+                email,
+                password: 'dummy-password-to-check-existence'
+            });
+
+            // If we get here, the user exists (even with wrong password)
+            // This is a reliable way to check if email is registered
+            if (existingUser) {
+                return { 
+                    success: false, 
+                    message: 'An account with this email already exists.', 
+                    errorType: 'duplicate_email' 
+                };
+            }
+        } catch (checkError) {
+            // If sign in fails with "Invalid login credentials", user doesn't exist
+            // This is expected for new users, so we continue with signup
+            if (!checkError.message.toLowerCase().includes('invalid login credentials')) {
+                // If it's a different error, check if it's a duplicate email error
+                if (checkError.message.toLowerCase().includes('already') || 
+                    checkError.message.toLowerCase().includes('exists') || 
+                    checkError.message.toLowerCase().includes('duplicate')) {
+                    return { 
+                        success: false, 
+                        message: 'An account with this email already exists.', 
+                        errorType: 'duplicate_email' 
+                    };
+                }
+            }
+        }
+
+        // Proceed with signup for new users
+        try {
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -157,21 +191,23 @@ class AuthManager {
             });
 
             if (error) {
-                // SPECIAL HANDLING FOR RATE LIMIT: The user is created, but email fails.
-                // This is a success from the user's perspective.
+                // Handle rate limit errors
                 if (error.message.toLowerCase().includes('rate limit exceeded')) {
-                    if (data.user) {
-                        return {
-                            success: true, // This is the key change.
-                            message: "Your account has been created! Please check your email for a verification link. If you don't receive it, you can request a new one from the login page."
-                        };
-                    }
+                    return { 
+                        success: false, 
+                        message: 'Email service is temporarily unavailable. Please try again in a few minutes.', 
+                        errorType: 'rate_limit' 
+                    };
                 }
 
-                // Handle other genuine errors
+                // Handle other errors
                 const errorMsg = error.message.toLowerCase();
                 if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('duplicate')) {
-                    return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
+                    return { 
+                        success: false, 
+                        message: 'An account with this email already exists.', 
+                        errorType: 'duplicate_email' 
+                    };
                 }
                 return { success: false, message: error.message };
             }
@@ -443,13 +479,18 @@ class AuthManager {
                 // Only hide the modal after the entire process is complete.
                 document.getElementById('authModal').style.display = 'none';
             } else {
-                if (result.errorType === 'duplicate_email') this.showDuplicateEmailPopup(email);
-                else if (result.errorType === 'unverified_email') {
+                if (result.errorType === 'duplicate_email') {
+                    this.showDuplicateEmailPopup(email);
+                } else if (result.errorType === 'unverified_email') {
                     this.showMessage(result.message, 'error');
                     const resendBtn = document.getElementById('resendVerificationBtn');
                     if(resendBtn) resendBtn.style.display = 'block';
+                } else if (result.errorType === 'rate_limit') {
+                    this.showMessage(result.message, 'error');
+                    // Don't hide modal for rate limit errors, let user try again
+                } else {
+                    this.showMessage(result.message, 'error');
                 }
-                else this.showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('Auth submission error:', error);

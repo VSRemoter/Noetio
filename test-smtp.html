@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMTP Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div style="padding: 20px; font-family: Arial, sans-serif;">
+        <h1>SMTP Configuration Test</h1>
+        
+        <div style="margin: 20px 0; padding: 15px; background: #f0f0f0; border-radius: 5px;">
+            <h3>Current SMTP Settings (from your description):</h3>
+            <ul>
+                <li><strong>Host:</strong> smtp-relay.brevo.com</li>
+                <li><strong>Port:</strong> 587</li>
+                <li><strong>Username:</strong> 911f0e001@smtp-brevo.com</li>
+                <li><strong>Sender Email:</strong> redlight@luxpdf.com</li>
+                <li><strong>Sender Name:</strong> redlight</li>
+                <li><strong>Rate Limit:</strong> 55 seconds between emails</li>
+            </ul>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <h3>Test Signup</h3>
+            <form id="testForm">
+                <div style="margin: 10px 0;">
+                    <label>Email: <input type="email" id="testEmail" placeholder="test@example.com" required></label>
+                </div>
+                <div style="margin: 10px 0;">
+                    <label>Password: <input type="password" id="testPassword" placeholder="password123" required></label>
+                </div>
+                <div style="margin: 10px 0;">
+                    <label>First Name: <input type="text" id="testFirstName" placeholder="Test" required></label>
+                </div>
+                <div style="margin: 10px 0;">
+                    <label>Last Name: <input type="text" id="testLastName" placeholder="User" required></label>
+                </div>
+                <button type="submit">Test Signup</button>
+            </form>
+        </div>
+
+        <div id="results" style="margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; min-height: 100px;">
+            <h3>Test Results:</h3>
+            <div id="resultContent">Click "Test Signup" to begin...</div>
+        </div>
+
+        <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
+            <h3>Rate Limit Issue Diagnosis:</h3>
+            <p><strong>If you get "rate limit exceeded" error:</strong></p>
+            <ul>
+                <li>Check if you've sent emails recently (within 55 seconds)</li>
+                <li>Verify your Brevo account has available email quota</li>
+                <li>Check if your domain (luxpdf.com) is properly verified in Brevo</li>
+                <li>Ensure your Brevo API key is valid and has SMTP permissions</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="supabase-config.js"></script>
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const resultDiv = document.getElementById('resultContent');
+            resultDiv.innerHTML = '<p style="color: blue;">Testing signup...</p>';
+            
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            const firstName = document.getElementById('testFirstName').value;
+            const lastName = document.getElementById('testLastName').value;
+            
+            try {
+                const authManager = new AuthManager();
+                const result = await authManager.signUp(email, password, firstName, lastName);
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <p style="color: green;">✅ SUCCESS!</p>
+                        <p><strong>Message:</strong> ${result.message}</p>
+                        <p><strong>User ID:</strong> ${result.userId || 'Not returned'}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <p style="color: red;">❌ FAILED</p>
+                        <p><strong>Error Type:</strong> ${result.errorType || 'Unknown'}</p>
+                        <p><strong>Message:</strong> ${result.message}</p>
+                        ${result.errorType === 'rate_limit' ? 
+                            '<p style="color: orange;"><strong>Rate Limit Issue:</strong> This suggests a problem with your SMTP configuration or Brevo settings.</p>' : 
+                            ''
+                        }
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p style="color: red;">❌ EXCEPTION</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Stack:</strong> ${error.stack}</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html> 
