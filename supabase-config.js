@@ -433,11 +433,9 @@ class AuthManager {
             } else {
                 if (result.errorType === 'duplicate_email') {
                     this.showMessage(result.message, 'error');
-                    this.showAuthModal('login');
-                    const authEmailInput = document.getElementById('authEmail');
-                    if (authEmailInput) {
-                        authEmailInput.value = email;
-                    }
+                    this.showAuthModal('login'); // Switch to login form
+                    document.getElementById('authEmail').value = email; // Pre-fill email
+                    document.getElementById('authPassword').focus(); // Focus password input
                 } else if (result.errorType === 'unverified_email') {
                     this.showMessage(result.message, 'error');
                     const resendBtn = document.getElementById('resendVerificationBtn');
@@ -450,8 +448,10 @@ class AuthManager {
             console.error('Auth submission error:', error);
             this.showMessage('An unexpected error occurred.', 'error');
         } finally {
-            if (type !== 'signup' || document.getElementById('authModalTitle').textContent !== 'Login') {
-                submitBtn.innerHTML = originalBtnText;
+            // If the modal is still open, reset the button to the correct state.
+            if (document.getElementById('authModal').style.display !== 'none') {
+                const modalTitle = document.getElementById('authModalTitle');
+                submitBtn.innerHTML = modalTitle.textContent; // "Login" or "Sign Up"
                 submitBtn.disabled = false;
             }
         }
