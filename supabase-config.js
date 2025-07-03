@@ -154,16 +154,16 @@ class AuthManager {
             });
 
             if (error) {
-                // This is the most reliable way to check for a duplicate user.
                 if (error.message.toLowerCase().includes('user already registered')) {
                     return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
                 }
-                // For any other error (including SMTP issues), report it as a generic failure.
-                // This prevents the UI from giving misleading success messages.
                 return { success: false, message: 'Could not complete signup. Please check your details and try again.' };
             }
 
-            // If there's no error, and we have a user, it's a success.
+            if (data.user && data.user.identities && data.user.identities.length === 0) {
+                return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
+            }
+
             if (data.user) {
                  return { success: true, message: 'Check your email for a verification link!' };
             }
