@@ -52,12 +52,7 @@ A modern web application for taking notes on YouTube videos with support for vid
    cd youtube-note-taker
    ```
 
-2. **Install Node.js dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Install Python dependencies**
+2. **Install Python dependencies**
    ```bash
    pip install flask flask-cors youtube-transcript-api
    ```
@@ -75,10 +70,6 @@ A modern web application for taking notes on YouTube videos with support for vid
    This starts the Flask server on port 8080 for transcript fetching.
 
 2. **Start the main application**
-   ```bash
-   npm start
-   ```
-   Or serve the files using any HTTP server:
    ```bash
    python -m http.server 3000
    ```
@@ -120,7 +111,6 @@ youtube-note-taker/
 ├── styles.css          # CSS styles
 ├── script.js           # Main JavaScript application
 ├── server.py           # Python Flask server for transcripts
-├── server.js           # Node.js server (alternative)
 ├── package.json        # Node.js dependencies
 ├── README.md           # This file
 └── venv/               # Python virtual environment

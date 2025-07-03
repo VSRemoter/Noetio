@@ -145,8 +145,6 @@ class AuthManager {
 
     async signUp(email, password, firstName, lastName) {
         try {
-            console.log('Starting signup process for:', email);
-            
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -157,80 +155,41 @@ class AuthManager {
                     }
                 }
             });
-            
-            console.log('Supabase auth response:', { data, error });
-            
+
             if (error) {
-                console.error('Supabase auth error:', error);
-                console.error('Error message:', error.message);
-                console.error('Error status:', error.status);
-                
-                // Check for ANY error message that indicates duplicate email
-                const errorMsg = error.message.toLowerCase();
-                if (errorMsg.includes('already') || 
-                    errorMsg.includes('exists') || 
-                    errorMsg.includes('registered') ||
-                    errorMsg.includes('duplicate') ||
-                    errorMsg.includes('user already registered')) {
-                    return { 
-                        success: false, 
-                        message: 'An account with this email already exists. Please try logging in instead.',
-                        errorType: 'duplicate_email'
-                    };
+                // SPECIAL HANDLING FOR RATE LIMIT: The user is created, but email fails.
+                // This is a success from the user's perspective.
+                if (error.message.toLowerCase().includes('rate limit exceeded')) {
+                    if (data.user) {
+                        return {
+                            success: true, // This is the key change.
+                            message: "Your account has been created! Please check your email for a verification link. If you don't receive it, you can request a new one from the login page."
+                        };
+                    }
                 }
-                
-                // Return the actual error message from Supabase
+
+                // Handle other genuine errors
+                const errorMsg = error.message.toLowerCase();
+                if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('duplicate')) {
+                    return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
+                }
                 return { success: false, message: error.message };
             }
-            
-            // Check if user already exists (Supabase doesn't error, to prevent enumeration)
-            if (data.user && data.user.identities && data.user.identities.length === 0) {
-                console.warn('Signup attempt for existing email:', email);
-                return { 
-                    success: false, 
-                    message: 'An account with this email already exists. Please try logging in instead.',
-                    errorType: 'duplicate_email'
-                };
+
+            if (data.user) {
+                return { success: true, message: 'Check your email for verification link!' };
             }
-            
-            // Check if user was created successfully
-            if (!data.user) {
-                console.error('No user data returned from signup');
-                return { success: false, message: 'Failed to create user account. Please try again.' };
-            }
-            
-            console.log('User created successfully:', data.user.id);
-            
-            // DON'T create profile here - let it be created when user first logs in
-            // This avoids the RLS policy issues during signup
-            
-            return { success: true, message: 'Check your email for verification link!' };
-        } catch (error) {
-            console.error('Signup error:', error);
-            console.error('Error message:', error.message);
-            
-            // Check for ANY error message that indicates duplicate email
-            const errorMsg = error.message.toLowerCase();
-            if (errorMsg.includes('already') || 
-                errorMsg.includes('exists') || 
-                errorMsg.includes('registered') ||
-                errorMsg.includes('duplicate') ||
-                errorMsg.includes('user already registered')) {
-                return { 
-                    success: false, 
-                    message: 'An account with this email already exists. Please try logging in instead.',
-                    errorType: 'duplicate_email'
-                };
-            }
-            
-            // Return the actual error message
-            return { success: false, message: error.message };
+
+            return { success: false, message: 'An unknown error occurred during signup.' };
+        } catch (e) {
+            console.error('Catastrophic signup error:', e);
+            return { success: false, message: 'An unexpected error occurred.' };
         }
     }
 
     async createUserProfile(userId, email, firstName, lastName) {
         try {
-            console.log('Creating profile for user:', userId, 'with email:', email);
+
             
             const { data, error } = await supabase
                 .from('user_profiles')
@@ -249,7 +208,7 @@ class AuthManager {
                 
                 // If it's a duplicate key error, try to update instead
                 if (error.code === '23505') { // Unique violation
-                    console.log('Duplicate key detected, trying to update profile...');
+    
                     const { error: updateError } = await supabase
                         .from('user_profiles')
                         .update({
@@ -262,7 +221,7 @@ class AuthManager {
                         console.error('Error updating user profile:', updateError);
                         return false;
                     }
-                    console.log('Profile updated successfully');
+
                     return true;
                 } else {
                     console.error('Database error creating profile:', error.message);
@@ -270,7 +229,7 @@ class AuthManager {
                 }
             }
             
-            console.log('Profile created successfully:', data);
+
             return true;
         } catch (error) {
             console.error('Error creating/updating user profile:', error);
@@ -291,14 +250,14 @@ class AuthManager {
             }
 
             if (data.user) {
-                console.log('Login successful, starting synchronous state update...');
+
                 // This is the critical synchronous flow.
                 this.user = data.user;
                 this.isAuthenticated = true;
                 await this.loadUserProfile();
                 this.onAuthStateChange(); // This calls updateAuthUI() AND syncUserData()
                 
-                console.log('Synchronous state update complete.');
+
                 return { success: true };
             }
             return { success: false, message: 'An unknown error occurred.' };
@@ -346,33 +305,30 @@ class AuthManager {
     }
 
     async resendVerification(email) {
+        const submitBtn = document.getElementById('resendVerificationBtn');
+        if (!submitBtn) return;
+        
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Sending...';
+        
         try {
-            // Disable for 3 seconds to prevent spam
-            let countdown = 3;
-            const originalText = 'Resend Verification Email';
-            const interval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    submitBtn.innerHTML = `Wait ${countdown}s`;
-                } else {
-                    clearInterval(interval);
-                    submitBtn.innerHTML = originalText;
-                    submitBtn.disabled = false;
-                }
-            }, 1000);
-            submitBtn.innerHTML = `Wait ${countdown}s`;
-            
             const { error } = await supabase.auth.resend({
                 type: 'signup',
                 email: email
             });
-            
-            if (error) throw error;
-            
-            return { success: true, message: 'Verification email sent! Please check your inbox.' };
+
+            if (error) {
+                this.showMessage(error.message, 'error');
+            } else {
+                this.showMessage('Verification email sent!', 'success');
+            }
         } catch (error) {
-            console.error('Resend verification error:', error);
-            return { success: false, message: error.message };
+            console.error('Resend error:', error);
+            this.showMessage('An unexpected error occurred.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         }
     }
 
@@ -771,7 +727,7 @@ class AuthManager {
     async syncUserData() {
         if (!this.user) return;
         try {
-            console.log('Syncing user data from database...');
+
             const videos = await this.getVideos();
             const playlists = await this.getPlaylists();
             
@@ -780,7 +736,7 @@ class AuthManager {
                 detail: { videos, playlists } 
             });
             document.dispatchEvent(event);
-            console.log('Dispatched userDataReady event with user data.');
+
 
         } catch (error) {
             console.error('Error syncing user data:', error);
@@ -806,7 +762,7 @@ class AuthManager {
         }
     }
 
-    showDuplicateEmailPopup(email) {
+    async showDuplicateEmailPopup(email) {
         // Create a custom popup for duplicate email
         const popup = document.createElement('div');
         popup.className = 'duplicate-email-popup';
@@ -919,7 +875,7 @@ class AuthManager {
                 return false;
             }
             
-            console.log('Database connection test successful');
+
             return true;
         } catch (error) {
             console.error('Database connection test error:', error);

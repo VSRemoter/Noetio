@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Listen for the custom event from AuthManager to load user's data
     document.addEventListener('userDataReady', (e) => {
-        console.log('Event userDataReady received by dashboard.');
+
         if (e.detail) {
             // Overwrite local arrays with fresh data from the database
             videos = e.detail.videos || [];
@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.removeItem(DASHBOARD_STORAGE_KEY);
             localStorage.removeItem(PLAYLISTS_STORAGE_KEY);
             
-            console.log('Dashboard data updated from event:', { videos, playlists });
+
             
             // Render the dashboard with the new, correct data
             renderDashboard();

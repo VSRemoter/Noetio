@@ -41,38 +41,7 @@ body {
     opacity: 0.9;
 }
 
-/* Authentication Status */
-.auth-status {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 8px 16px;
-    border-radius: 8px;
-    backdrop-filter: blur(10px);
-}
 
-.auth-status .user-email {
-    color: white;
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-.auth-status .btn {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.auth-status .btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.5);
-}
 
 /* Main Content Layout */
 .main-content {
