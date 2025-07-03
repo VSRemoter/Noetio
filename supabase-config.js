@@ -145,49 +145,36 @@ class AuthManager {
 
     async signUp(email, password, firstName, lastName) {
         try {
-            // Attempt to sign up directly - let Supabase handle duplicate detection
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
-                options: {
-                    data: {
-                        first_name: firstName,
-                        last_name: lastName
-                    }
-                }
+                options: { data: { first_name: firstName, last_name: lastName } }
             });
 
             if (error) {
-                // Handle rate limit errors
-                if (error.message.toLowerCase().includes('rate limit exceeded')) {
-                    return { 
-                        success: false, 
-                        message: 'Email service is temporarily unavailable. Please try again in a few minutes.', 
-                        errorType: 'rate_limit' 
-                    };
+                const msg = error.message.toLowerCase();
+                if (msg.includes('error sending confirmation email')) {
+                    return { success: true, message: 'Check your email for a verification link!' };
                 }
-
-                // Handle duplicate email errors
-                const errorMsg = error.message.toLowerCase();
-                if (errorMsg.includes('already') || 
-                    errorMsg.includes('exists') || 
-                    errorMsg.includes('duplicate') ||
-                    errorMsg.includes('user already registered')) {
-                    return { 
-                        success: false, 
-                        message: 'An account with this email already exists.', 
-                        errorType: 'duplicate_email' 
-                    };
+                if (msg.includes('user already registered')) {
+                    return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
                 }
-                
                 return { success: false, message: error.message };
             }
 
             if (data.user) {
-                return { success: true, message: 'Check your email for verification link!' };
+                const createdAt = new Date(data.user.created_at).getTime();
+                const updatedAt = new Date(data.user.updated_at).getTime();
+
+                if (updatedAt - createdAt > 2000) { // 2-second threshold
+                    return { success: false, message: 'An account with this email already exists.', errorType: 'duplicate_email' };
+                } else {
+                    return { success: true, message: 'Check your email for a verification link!' };
+                }
             }
 
             return { success: false, message: 'An unknown error occurred during signup.' };
+
         } catch (e) {
             console.error('Catastrophic signup error:', e);
             return { success: false, message: 'An unexpected error occurred.' };
