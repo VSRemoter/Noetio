@@ -145,40 +145,7 @@ class AuthManager {
 
     async signUp(email, password, firstName, lastName) {
         try {
-            // First, check if user already exists by trying to sign in
-            const { data: existingUser } = await supabase.auth.signInWithPassword({
-                email,
-                password: 'dummy-password-to-check-existence'
-            });
-
-            // If we get here, the user exists (even with wrong password)
-            // This is a reliable way to check if email is registered
-            if (existingUser) {
-                return { 
-                    success: false, 
-                    message: 'An account with this email already exists.', 
-                    errorType: 'duplicate_email' 
-                };
-            }
-        } catch (checkError) {
-            // If sign in fails with "Invalid login credentials", user doesn't exist
-            // This is expected for new users, so we continue with signup
-            if (!checkError.message.toLowerCase().includes('invalid login credentials')) {
-                // If it's a different error, check if it's a duplicate email error
-                if (checkError.message.toLowerCase().includes('already') || 
-                    checkError.message.toLowerCase().includes('exists') || 
-                    checkError.message.toLowerCase().includes('duplicate')) {
-                    return { 
-                        success: false, 
-                        message: 'An account with this email already exists.', 
-                        errorType: 'duplicate_email' 
-                    };
-                }
-            }
-        }
-
-        // Proceed with signup for new users
-        try {
+            // Attempt to sign up directly - let Supabase handle duplicate detection
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -200,15 +167,19 @@ class AuthManager {
                     };
                 }
 
-                // Handle other errors
+                // Handle duplicate email errors
                 const errorMsg = error.message.toLowerCase();
-                if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('duplicate')) {
+                if (errorMsg.includes('already') || 
+                    errorMsg.includes('exists') || 
+                    errorMsg.includes('duplicate') ||
+                    errorMsg.includes('user already registered')) {
                     return { 
                         success: false, 
                         message: 'An account with this email already exists.', 
                         errorType: 'duplicate_email' 
                     };
                 }
+                
                 return { success: false, message: error.message };
             }
 
