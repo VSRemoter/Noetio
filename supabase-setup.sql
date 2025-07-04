@@ -21,6 +21,7 @@ BEGIN;
 -- Drop the trigger and function to ensure they can be recreated cleanly.
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS handle_new_user();
+DROP FUNCTION IF EXISTS handle_delete_user();
 
 -- Drop all known RLS policies from all tables to ensure a clean slate.
 DROP POLICY IF EXISTS "Allow profile creation for new users" ON public.user_profiles;
@@ -36,10 +37,10 @@ DROP POLICY IF EXISTS "Enable update for users based on user_id" ON public.user_
 DROP POLICY IF EXISTS "Enable delete for users based on user_id" ON public.user_profiles;
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.user_profiles;
 
-DROP POLICY IF EXISTS "Users can manage their own videos" ON public.videos;
-DROP POLICY IF EXISTS "Users can manage their own playlists" ON public.playlists;
-DROP POLICY IF EXISTS "Users can manage their own notes" ON public.notes;
-DROP POLICY IF EXISTS "Users can manage their own tags" ON public.tags;
+DROP POLICY IF EXISTS "Users can manage their own data" ON public.videos;
+DROP POLICY IF EXISTS "Users can manage their own data" ON public.playlists;
+DROP POLICY IF EXISTS "Users can manage their own data" ON public.notes;
+DROP POLICY IF EXISTS "Users can manage their own data" ON public.tags;
 DROP POLICY IF EXISTS "Users can manage their own sessions" ON public.user_sessions;
 DROP POLICY IF EXISTS "Users can manage their own activity" ON public.user_activity;
 DROP POLICY IF EXISTS "Users can manage their playlist videos" ON public.playlist_videos;
@@ -75,9 +76,28 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
+-- ================================================================================================
+-- STEP 3: ADD ACCOUNT DELETION LOGIC
+-- ================================================================================================
+CREATE OR REPLACE FUNCTION handle_delete_user()
+RETURNS void AS $$
+BEGIN
+  -- Delete all user data from public tables
+  DELETE FROM public.notes WHERE user_id = auth.uid();
+  DELETE FROM public.videos WHERE user_id = auth.uid();
+  DELETE FROM public.playlists WHERE user_id = auth.uid();
+  DELETE FROM public.tags WHERE user_id = auth.uid();
+  DELETE FROM public.user_activity WHERE user_id = auth.uid();
+  DELETE FROM public.shared_links WHERE user_id = auth.uid();
+
+  -- Finally, delete the user profile
+  DELETE FROM public.user_profiles WHERE user_id = auth.uid();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- ================================================================================================
--- STEP 3: ESTABLISH CORRECT SECURITY POLICIES
+-- STEP 4: ESTABLISH CORRECT SECURITY POLICIES
 -- ================================================================================================
 -- Enable Row Level Security on all tables.
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;

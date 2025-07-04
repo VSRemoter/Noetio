@@ -51,9 +51,37 @@
             </main>
             <!-- Settings Section (hidden by default) -->
             <section class="dashboard-settings" id="dashboardSettingsSection" style="display:none;">
-                <h2>Settings</h2>
-                <div class="settings-fake">
-                    <p><strong>Email:</strong> <span id="userEmail">user@example.com</span></p>
+                <h2>Account Settings</h2>
+                <form id="settingsForm" class="auth-form" style="max-width: 500px; margin: auto;">
+                    <div class="form-group">
+                        <label for="settingsDisplayName">Display Name:</label>
+                        <input type="text" id="settingsDisplayName" name="displayName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="settingsEmail">Email Address:</label>
+                        <input type="email" id="settingsEmail" name="email" required>
+                    </div>
+                    <hr style="margin: 20px 0;">
+                    <h4>Change Password</h4>
+                    <div class="form-group">
+                        <label for="settingsNewPassword">New Password:</label>
+                        <input type="password" id="settingsNewPassword" name="newPassword" placeholder="Leave blank to keep current password">
+                    </div>
+                    <div class="form-group">
+                        <label for="settingsConfirmPassword">Confirm New Password:</label>
+                        <input type="password" id="settingsConfirmPassword" name="confirmPassword" placeholder="Confirm new password">
+                    </div>
+                    <div class="form-group">
+                        <label for="settingsCurrentPassword">Current Password</label>
+                        <input type="password" id="settingsCurrentPassword" name="currentPassword" placeholder="Required to update email or password" autocomplete="current-password">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" id="settingsSubmitBtn" class="auth-submit-btn">Save Changes</button>
+                    </div>
+                </form>
+                <div style="max-width: 500px; margin: 20px auto; text-align: center;">
+                    <hr>
+                    <button id="deleteAccountBtn" class="auth-submit-btn" style="background: #dc3545; margin-top: 20px;">Delete Account</button>
                 </div>
             </section>
         </div>

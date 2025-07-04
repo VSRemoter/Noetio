@@ -17,6 +17,16 @@ const sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
 const dashboardSettingsSection = document.getElementById('dashboardSettingsSection');
 const dashboardContent = document.querySelector('.dashboard-content');
 
+// Settings form
+const settingsForm = document.getElementById('settingsForm');
+const settingsDisplayName = document.getElementById('settingsDisplayName');
+const settingsEmail = document.getElementById('settingsEmail');
+const settingsNewPassword = document.getElementById('settingsNewPassword');
+const settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
+const settingsSubmitBtn = document.getElementById('settingsSubmitBtn');
+const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+const settingsCurrentPassword = document.getElementById('settingsCurrentPassword');
+
 // Modal logic for Create New Note
 const createNoteModal = document.getElementById('createNoteModal');
 const modalMasterTitle = document.getElementById('modalMasterTitle');
@@ -140,9 +150,9 @@ function renderDashboard() {
 }
 
 function updateSettingsUserInfo() {
-    const userEmail = document.getElementById('userEmail');
-    if (userEmail && authManager && authManager.user) {
-        userEmail.textContent = authManager.user.email;
+    if (authManager && authManager.user) {
+        if (settingsEmail) settingsEmail.value = authManager.user.email;
+        if (settingsDisplayName) settingsDisplayName.value = authManager.userProfile?.first_name || '';
     }
 }
 
@@ -255,6 +265,69 @@ function createVideoBox(video) {
         };
     });
     return box;
+}
+
+if (settingsForm) {
+    settingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const newPassword = settingsNewPassword.value;
+        const confirmPassword = settingsConfirmPassword.value;
+
+        if (newPassword && newPassword !== confirmPassword) {
+            showMessage('New passwords do not match.', 'error');
+            return;
+        }
+
+        const updates = {
+            displayName: settingsDisplayName.value,
+            email: settingsEmail.value,
+        };
+
+        if (newPassword) {
+            updates.password = newPassword;
+        }
+
+        const currentPassword = settingsCurrentPassword.value;
+
+        // Disable button while processing
+        settingsSubmitBtn.disabled = true;
+        settingsSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        const { success, message } = await authManager.updateUserSettings(updates, currentPassword);
+
+        if (success) {
+            showMessage(message || 'Settings updated successfully!', 'success');
+        } else {
+            showMessage(message || 'Failed to update settings.', 'error');
+        }
+        
+        // Re-enable button
+        settingsSubmitBtn.disabled = false;
+        settingsSubmitBtn.innerHTML = 'Save Changes';
+    });
+}
+
+if (deleteAccountBtn) {
+    deleteAccountBtn.addEventListener('click', async () => {
+        if (confirm('Are you sure you want to delete the account, all notes, videos, playlists saved will be deleted!')) {
+            deleteAccountBtn.disabled = true;
+            deleteAccountBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+
+            const { success, message } = await authManager.deleteAccount();
+
+            if (success) {
+                showMessage('Account deleted successfully.', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } else {
+                showMessage(message || 'Failed to delete account.', 'error');
+                deleteAccountBtn.disabled = false;
+                deleteAccountBtn.innerHTML = 'Delete Account';
+            }
+        }
+    });
 }
 
 // --- Search ---

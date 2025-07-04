@@ -397,6 +397,95 @@ class AuthManager {
         document.getElementById('profileLogoutBtn').onclick = () => this.logout();
     }
 
+    async updateUserSettings(updates, currentPassword) {
+        if (!this.user) {
+            return { success: false, message: 'You must be logged in to update settings.' };
+        }
+    
+        try {
+            const userUpdates = {};
+            const requiresReauth = (updates.email && updates.email !== this.user.email) || updates.password;
+            
+            if (requiresReauth) {
+                if (!currentPassword) {
+                    return { success: false, message: 'Current password is required to change email or password.' };
+                }
+
+                // Use the currently signed-in user's email for re-authentication.
+                const originalEmail = this.user.email;
+                const { error: reauthError } = await supabase.auth.signInWithPassword({
+                    email: originalEmail,
+                    password: currentPassword,
+                });
+
+                if (reauthError) {
+                    return { success: false, message: 'Incorrect current password. Please try again.' };
+                }
+            }
+
+            // Update profile (display name) - does not require re-authentication
+            const { error: profileError } = await supabase
+                .from('user_profiles')
+                .update({ first_name: updates.displayName })
+                .eq('user_id', this.user.id);
+    
+            if (profileError) {
+                throw profileError;
+            }
+            
+            // Prepare updates for the auth user
+            if (updates.email && updates.email !== this.user.email) {
+                userUpdates.email = updates.email;
+            }
+            if (updates.password) {
+                if (updates.password.length < 6) {
+                    return { success: false, message: 'New password must be at least 6 characters long' };
+                }
+                userUpdates.password = updates.password;
+            }
+    
+            // Perform user update if there are changes
+            if (Object.keys(userUpdates).length > 0) {
+                const { data, error: authError } = await supabase.auth.updateUser(userUpdates);
+                if (authError) {
+                    throw authError;
+                }
+            }
+            
+            // Reload user profile data to reflect changes
+            await this.loadUserProfile();
+            this.updateAuthUI();
+    
+            let message = 'Settings updated successfully!';
+            if (userUpdates.email) {
+                message = 'Settings saved. A confirmation link has been sent to your new email address.';
+            } else if (userUpdates.password) {
+                message = 'Password updated successfully!';
+            }
+            
+            return { success: true, message };
+    
+        } catch (error) {
+            console.error('Error updating user settings:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    async deleteAccount() {
+        if (!this.user) {
+            return { success: false, message: 'You must be logged in to delete your account.' };
+        }
+        try {
+            const { error } = await supabase.rpc('handle_delete_user');
+            if (error) throw error;
+            await supabase.auth.signOut();
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            return { success: false, message: 'Failed to delete account. Please try again.' };
+        }
+    }
+
     async handleAuthSubmit(e, type) {
         e.preventDefault();
         const submitBtn = document.getElementById('authSubmitBtn');
